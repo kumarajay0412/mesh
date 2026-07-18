@@ -1,0 +1,116 @@
+/* ==========================================================================
+   PRESS — Ada design tokens (ported from the Mesh AI Claude Design file)
+   "Four colours, full stop": Ink · Signal Yellow · White · Card.
+   Dark is the default; [data-ada-theme="light"] remaps to the paper variant.
+   ========================================================================== */
+
+:root {
+  /* Core 1 · Ink */
+  --ada-ink-900: #0e0e0e;
+  --ada-ink-850: #141414;
+  --ada-ink-800: #181818;
+  --ada-ink-700: #242424;
+  --ada-ink-600: #2e2e2e;
+  --ada-ink-500: #3a3a3a;
+
+  /* Core 2 · Signal Yellow */
+  --ada-gold-200: #fbe9a6;
+  --ada-gold-300: #f8d660;
+  --ada-gold-400: #f5c518;
+  --ada-gold-500: #e0b400;
+  --ada-gold-600: #c9a21a;
+  --ada-gold-700: #9a7605;
+
+  /* Core 3 · White / Core 4 · Card */
+  --ada-white: #ffffff;
+  --ada-card: #f4f4f2;
+  --ada-paper: #f4f4f2;
+  --ada-paper-warm: #f7f4ee;
+
+  /* Neutral scale */
+  --ada-gray-100: #ececea;
+  --ada-gray-150: #dcdcda;
+  --ada-gray-200: #c8c8c8;
+  --ada-gray-300: #b4b4b4;
+  --ada-gray-400: #9a9a9a;
+  --ada-gray-500: #7e7e7e;
+  --ada-gray-600: #6e6e6e;
+  --ada-gray-700: #363636;
+  --ada-gray-800: #202020;
+
+  /* Categorical / celebration accents */
+  --ada-accent-coral: #f2664a;
+  --ada-accent-teal: #1fa89a;
+  --ada-accent-sky: #4fa7da;
+  --ada-accent-plum: #8a63a8;
+
+  /* Semantic status */
+  --ada-success: var(--ada-accent-teal);
+  --ada-warning: var(--ada-gold-500);
+  --ada-danger: var(--ada-accent-coral);
+  --ada-info: var(--ada-accent-sky);
+
+  /* Semantic theme tokens — DARK default */
+  --ada-bg: var(--ada-ink-900);
+  --ada-surface: var(--ada-ink-800);
+  --ada-surface-raised: var(--ada-ink-700);
+  --ada-text: var(--ada-gray-150);
+  --ada-text-muted: var(--ada-gray-300);
+  --ada-text-subtle: var(--ada-gray-600);
+  --ada-line: var(--ada-ink-700);
+  --ada-line-strong: var(--ada-gray-700);
+  --ada-accent: var(--ada-gold-400);
+  --ada-accent-strong: var(--ada-gold-300);
+  --ada-accent-text: var(--ada-gold-400);
+  --ada-accent-ink: #0e0e0e;
+  --ada-field-bg: rgba(255, 255, 255, 0.04);
+
+  /* Type */
+  --ada-font-display: "Aptos Display", "Aptos", "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --ada-font-body: "Aptos", "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --ada-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ada-ls-tight: -0.02em;
+  --ada-ls-eyebrow: 0.18em;
+
+  /* Spacing & radii (4px base) */
+  --ada-radius-sm: 6px;
+  --ada-radius-md: 10px;
+  --ada-radius-lg: 16px;
+  --ada-radius-xl: 24px;
+  --ada-radius-pill: 999px;
+
+  /* Elevation & motion */
+  --ada-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ada-shadow-2: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --ada-shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --ada-shadow-glow: 0 0 0 1px rgba(245, 197, 24, 0.35), 0 8px 30px rgba(245, 197, 24, 0.12);
+  --ada-ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ada-dur-fast: 140ms;
+  --ada-dur-base: 240ms;
+}
+
+[data-ada-theme="light"] {
+  --ada-bg: var(--ada-paper-warm);
+  --ada-surface: var(--ada-white);
+  --ada-surface-raised: var(--ada-white);
+  --ada-text: #1f1e1c;
+  --ada-text-muted: var(--ada-gray-600);
+  --ada-text-subtle: var(--ada-gray-500);
+  --ada-line: var(--ada-gray-200);
+  --ada-line-strong: var(--ada-gray-300);
+  --ada-accent-text: var(--ada-gold-700);
+  --ada-field-bg: var(--ada-gray-100);
+  --ada-shadow-1: 0 1px 2px rgba(31, 30, 28, 0.08);
+  --ada-shadow-2: 0 6px 20px rgba(31, 30, 28, 0.08);
+  --ada-shadow-soft: 0 10px 40px rgba(31, 30, 28, 0.1);
+  --ada-shadow-3: 0 20px 60px rgba(31, 30, 28, 0.14);
+
+  /* Remap the ink scale itself: every hardcoded bg-ink-* / border-ink-*
+     surface flips to its paper equivalent — the whole app follows. */
+  --ada-ink-900: #f7f4ee; /* window ground */
+  --ada-ink-850: #f1ede3; /* sidebar / chrome */
+  --ada-ink-800: #ffffff; /* panels / cards */
+  --ada-ink-700: #e7e2d5; /* hairlines / raised */
+  --ada-ink-600: #d8d2c3; /* inactive pips, scrollbars */
+  --ada-ink-500: #c6bfae;
+}

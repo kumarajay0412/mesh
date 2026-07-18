@@ -1,0 +1,1252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesh AI — UI Mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #faf9f5;
+    --bg-elevated:  #ffffff;
+    --bg-subtle:    #f2efe6;
+    --border:       #e8e3d4;
+    --border-strong:#d4cdb8;
+    --text:         #1f1e1c;
+    --text-muted:   #6b685e;
+    --text-faint:   #94908a;
+    --accent:       #cc785c;
+    --accent-soft:  #f4d8cc;
+    --success:      #5a7a3e;
+    --warning:      #b58a3a;
+    --danger:       #a8513e;
+    --l1:#4f46e5; --l2:#7c3aed; --l3:#cc785c;
+    --l4:#059669; --l5:#0891b2; --l6:#be185d;
+  }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-serif { font-family: 'Source Serif Pro', Georgia, serif; }
+  .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .nav-item { color: var(--text-muted); }
+  .nav-item.active { color: var(--text); background: var(--bg-subtle); }
+  .nav-item:hover:not(.active) { background: rgba(0,0,0,0.025); }
+  .dot { display:inline-block; width:6px; height:6px; border-radius:50%; }
+  .card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; }
+  .btn {
+    padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500;
+    border: 1px solid transparent; transition: all 0.1s; cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #b86a4f; }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-ghost:hover { background: var(--bg-subtle); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .input {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 12px; font-size: 13px; color: var(--text);
+  }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pill {
+    display:inline-flex; align-items:center; gap:5px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+  }
+  .pill-ok { background: #f0f6e9; border-color: #cfe1b8; color: var(--success); }
+  .pill-warn { background: #faf3df; border-color: #ecdfb2; color: var(--warning); }
+  .pill-danger { background: #fbeae5; border-color: #f0cfc4; color: var(--danger); }
+  .stage-tab { color: var(--text-muted); }
+  .stage-tab.active { color: var(--text); border-color: var(--accent); }
+  .graph-node { cursor: pointer; }
+  .graph-node rect { transition: stroke 0.15s; }
+  .graph-node:hover rect { stroke: var(--accent); stroke-width: 1.5; }
+  .graph-node.selected rect { stroke: var(--accent); stroke-width: 2; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  .diff-add { background: #f0f6e9; color: #3e5a25; }
+  .diff-del { background: #fbeae5; color: #842e1d; }
+  .scroll-hide::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scroll-hide::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  /* status pulse for live agents */
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(204,120,92,0.5); }
+    50%      { box-shadow: 0 0 0 5px rgba(204,120,92,0); }
+  }
+  .pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+  /* token stream scroll */
+  .token-stream {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-height: 110px;
+    overflow-y: auto;
+  }
+  .token-stream .new { color: var(--text); }
+
+  /* steer dialog reveal */
+  .steer-box { display: none; }
+  .steer-box.open { display: block; }
+
+  /* agent panel state colors */
+  .agent-panel { transition: border-color 0.15s; }
+  .agent-panel:hover { border-color: var(--border-strong); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="flex h-screen">
+
+  <!-- ============ LEFT NAV ============ -->
+  <aside class="w-60 border-r border-[var(--border)] flex flex-col shrink-0">
+    <div class="p-5">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-md bg-[var(--accent)] flex items-center justify-center text-white font-serif font-semibold">M</div>
+        <div>
+          <div class="font-serif font-semibold leading-tight">Mesh AI</div>
+          <div class="text-[11px] text-[var(--text-muted)]">POC · localhost</div>
+        </div>
+      </div>
+    </div>
+    <nav class="flex-1 px-2 space-y-0.5 text-sm">
+      <button data-screen="graph" class="nav-item w-full text-left px-3 py-2 rounded-md flex items-center gap-3">
+        <span class="text-base leading-none">◇</span><span>Graph</span>
+      </button>
+      <button data-screen="repos" class="nav-item w-full text-left px-3 py-2 rounded-md flex items-center gap-3">
+        <span class="text-base leading-none">▤</span><span>Repos</span>
+        <span class="ml-auto text-[11px] text-[var(--text-faint)]">8</span>
+      </button>
+      <button data-screen="new-run" class="nav-item active w-full text-left px-3 py-2 rounded-md flex items-center gap-3">
+        <span class="text-base leading-none">＋</span><span>New run</span>
+      </button>
+      <button data-screen="run-view" class="nav-item w-full text-left px-3 py-2 rounded-md flex items-center gap-3">
+        <span class="text-base leading-none">◐</span><span>Run #042</span>
+        <span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-soft)] text-[var(--accent)] font-medium">live</span>
+      </button>
+      <button data-screen="history" class="nav-item w-full text-left px-3 py-2 rounded-md flex items-center gap-3">
+        <span class="text-base leading-none">≡</span><span>History</span>
+      </button>
+    </nav>
+    <div class="p-3 mx-2 mb-3 text-[11px] text-[var(--text-muted)] space-y-1 border-t border-[var(--border)] pt-3">
+      <div class="flex items-center gap-2"><span class="dot" style="background:var(--success)"></span> Postgres</div>
+      <div class="flex items-center gap-2"><span class="dot" style="background:var(--success)"></span> Temporal · 8 workers</div>
+      <div class="flex items-center gap-2"><span class="dot" style="background:var(--warning)"></span> Indexer · 2 queued</div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 overflow-y-auto scroll-hide">
+
+    <!-- ============ GRAPH ============ -->
+    <section class="screen" id="screen-graph">
+      <div class="border-b border-[var(--border)] px-8 py-4 bg-[var(--bg-elevated)]">
+        <div class="flex items-center gap-4">
+          <div class="flex-1 max-w-xl relative">
+            <input class="input w-full pl-9" placeholder="Search symbols, services, contracts…">
+            <span class="absolute left-3 top-2 text-[var(--text-faint)] text-sm">⌕</span>
+          </div>
+          <button class="btn btn-ghost btn-sm">Last indexed · 4 min ago</button>
+          <button class="btn btn-ghost btn-sm">Re-index all</button>
+        </div>
+      </div>
+
+      <div class="flex" style="height: calc(100vh - 73px)">
+        <!-- Layer rail -->
+        <aside class="w-56 border-r border-[var(--border)] p-5 text-sm shrink-0">
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium mb-3">Layers</div>
+          <div class="space-y-2.5">
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" checked class="accent-[var(--l1)]"><span class="dot" style="background:var(--l1)"></span><span>L1 · Code</span></label>
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" checked class="accent-[var(--l2)]"><span class="dot" style="background:var(--l2)"></span><span>L2 · Dependency</span></label>
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" checked class="accent-[var(--l3)]"><span class="dot" style="background:var(--l3)"></span><span>L3 · Contract</span></label>
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" class="accent-[var(--l4)]"><span class="dot" style="background:var(--l4)"></span><span>L4 · Ownership</span></label>
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" checked class="accent-[var(--l5)]"><span class="dot" style="background:var(--l5)"></span><span>L5 · Deployment</span></label>
+            <label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" class="accent-[var(--l6)]"><span class="dot" style="background:var(--l6)"></span><span>L6 · CI</span></label>
+          </div>
+
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium mt-7 mb-3">Scope</div>
+          <select class="input w-full text-xs"><option>All repos (8)</option><option>auth-service</option></select>
+
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium mt-7 mb-3">Legend</div>
+          <div class="space-y-1.5 text-xs text-[var(--text-muted)]">
+            <div>— solid · direct edge</div>
+            <div>┄ dashed · transitive</div>
+          </div>
+        </aside>
+
+        <!-- Graph canvas -->
+        <div class="flex-1 relative" style="background: radial-gradient(circle at 50% 50%, #fefdf8 0%, var(--bg) 60%);">
+          <svg viewBox="0 0 800 540" class="w-full h-full">
+            <!-- edges -->
+            <g fill="none" stroke-width="1.5">
+              <!-- L3 contract edges from auth-service -->
+              <path d="M 410 270 Q 540 220 660 180" stroke="var(--l3)" />
+              <path d="M 410 270 Q 540 270 660 260" stroke="var(--l3)" />
+              <path d="M 410 270 Q 540 320 660 340" stroke="var(--l3)" />
+              <path d="M 410 270 Q 540 360 660 420" stroke="var(--l3)" />
+              <!-- L2 dep edges -->
+              <path d="M 220 160 Q 300 210 380 250" stroke="var(--l2)" stroke-dasharray="4 3" />
+              <path d="M 220 380 Q 300 330 380 290" stroke="var(--l2)" stroke-dasharray="4 3" />
+              <!-- L5 deploy edges (thicker) -->
+              <path d="M 410 290 Q 320 400 220 440" stroke="var(--l5)" stroke-width="2" />
+              <path d="M 410 290 Q 470 400 530 470" stroke="var(--l5)" stroke-width="2" />
+            </g>
+
+            <!-- nodes -->
+            <g class="graph-node selected">
+              <rect x="340" y="240" width="140" height="60" rx="8" fill="white" stroke="var(--border-strong)" />
+              <text x="410" y="265" text-anchor="middle" font-size="13" font-weight="600" font-family="Source Serif Pro">auth-service</text>
+              <text x="410" y="282" text-anchor="middle" font-size="10" fill="var(--text-muted)">L3 producer · 7 consumers</text>
+            </g>
+            <g class="graph-node">
+              <rect x="160" y="135" width="120" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="220" y="158" text-anchor="middle" font-size="12" font-weight="500">@org/auth-sdk</text>
+              <text x="220" y="172" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">npm · L2</text>
+            </g>
+            <g class="graph-node">
+              <rect x="160" y="355" width="120" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="220" y="378" text-anchor="middle" font-size="12" font-weight="500">@org/auth-types</text>
+              <text x="220" y="392" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">npm · L2</text>
+            </g>
+            <g class="graph-node">
+              <rect x="600" y="155" width="130" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="665" y="178" text-anchor="middle" font-size="12" font-weight="500">web-client</text>
+              <text x="665" y="192" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L3 consumer</text>
+            </g>
+            <g class="graph-node">
+              <rect x="600" y="235" width="130" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="665" y="258" text-anchor="middle" font-size="12" font-weight="500">mobile-client</text>
+              <text x="665" y="272" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L3 consumer</text>
+            </g>
+            <g class="graph-node">
+              <rect x="600" y="315" width="130" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="665" y="338" text-anchor="middle" font-size="12" font-weight="500">billing-svc</text>
+              <text x="665" y="352" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L3 consumer</text>
+            </g>
+            <g class="graph-node">
+              <rect x="600" y="395" width="130" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="665" y="418" text-anchor="middle" font-size="12" font-weight="500">notification-svc</text>
+              <text x="665" y="432" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L3 consumer</text>
+            </g>
+            <g class="graph-node">
+              <rect x="160" y="415" width="120" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="220" y="438" text-anchor="middle" font-size="12" font-weight="500">postgres-auth</text>
+              <text x="220" y="452" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L5 db</text>
+            </g>
+            <g class="graph-node">
+              <rect x="470" y="455" width="120" height="50" rx="7" fill="white" stroke="var(--border)" />
+              <text x="530" y="478" text-anchor="middle" font-size="12" font-weight="500">redis-sessions</text>
+              <text x="530" y="492" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">L5 cache</text>
+            </g>
+          </svg>
+
+          <!-- floating zoom controls -->
+          <div class="absolute bottom-4 right-4 card flex p-1 text-sm">
+            <button class="px-2.5 py-1 hover:bg-[var(--bg-subtle)] rounded">−</button>
+            <div class="px-2 py-1 text-xs text-[var(--text-muted)] font-mono">100%</div>
+            <button class="px-2.5 py-1 hover:bg-[var(--bg-subtle)] rounded">+</button>
+          </div>
+        </div>
+
+        <!-- Right inspector -->
+        <aside class="w-80 border-l border-[var(--border)] p-5 bg-[var(--bg-elevated)] overflow-y-auto scroll-hide shrink-0">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Service</div>
+              <div class="font-serif text-xl font-semibold mt-1">auth-service</div>
+              <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">~/code/auth-service</div>
+            </div>
+            <button class="btn btn-primary btn-sm">Run on this</button>
+          </div>
+
+          <div class="mt-5 grid grid-cols-2 gap-2 text-xs">
+            <div class="card p-3">
+              <div class="text-[var(--text-muted)] text-[11px]">Lang</div>
+              <div class="font-medium mt-0.5">TypeScript</div>
+            </div>
+            <div class="card p-3">
+              <div class="text-[var(--text-muted)] text-[11px]">LOC</div>
+              <div class="font-medium mt-0.5">24,510</div>
+            </div>
+          </div>
+
+          <div class="mt-5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Outgoing edges</div>
+          <div class="mt-3 space-y-2 text-sm">
+            <div class="flex items-center gap-2.5"><span class="dot" style="background:var(--l3)"></span><span class="font-medium">L3 Contract</span><span class="ml-auto text-[var(--text-muted)] text-xs">7 consumers</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot" style="background:var(--l5)"></span><span class="font-medium">L5 Deploy</span><span class="ml-auto text-[var(--text-muted)] text-xs">postgres, redis</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot" style="background:var(--l2)"></span><span class="font-medium">L2 Dep</span><span class="ml-auto text-[var(--text-muted)] text-xs">11 packages</span></div>
+            <div class="flex items-center gap-2.5"><span class="dot" style="background:var(--l6)"></span><span class="font-medium">L6 CI</span><span class="ml-auto text-[var(--text-muted)] text-xs">3 pipelines</span></div>
+          </div>
+
+          <div class="mt-5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Owners (L4)</div>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <span class="pill"><span class="dot" style="background:var(--l4)"></span>@auth-team</span>
+            <span class="pill">@platform-oncall</span>
+          </div>
+
+          <div class="mt-5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Recent activity</div>
+          <div class="mt-3 space-y-2 text-xs text-[var(--text-muted)]">
+            <div>· <span class="text-[var(--text)]">Run #041</span> · contract bump · 2h ago</div>
+            <div>· Re-indexed · 4m ago</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ REPOS ============ -->
+    <section class="screen" id="screen-repos">
+      <div class="border-b border-[var(--border)] px-8 py-4 bg-[var(--bg-elevated)] flex items-center justify-between">
+        <div>
+          <div class="font-serif text-2xl font-semibold">Repositories</div>
+          <div class="text-xs text-[var(--text-muted)] mt-0.5">8 indexed · POC accepts local paths and git URLs</div>
+        </div>
+        <button class="btn btn-primary">＋ Add repo</button>
+      </div>
+
+      <div class="p-8 grid grid-cols-2 gap-5 max-w-6xl">
+
+        <!-- repo card -->
+        <div class="card p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="font-serif font-semibold text-lg">auth-service</div>
+              <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">/Users/ajay/code/auth-service</div>
+            </div>
+            <button class="text-[var(--text-faint)] hover:text-[var(--text)] text-lg">⋯</button>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l1)"></span>L1 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l2)"></span>L2 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l3)"></span>L3 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l4)"></span>L4 ✓</span>
+            <span class="pill pill-warn"><span class="dot" style="background:var(--l5)"></span>L5 partial</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l6)"></span>L6 ✓</span>
+          </div>
+          <div class="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
+            <span>Last indexed · 4m ago</span>
+            <button class="btn btn-ghost btn-sm">Re-index</button>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="font-serif font-semibold text-lg">web-client</div>
+              <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">/Users/ajay/code/web-client</div>
+            </div>
+            <button class="text-[var(--text-faint)] hover:text-[var(--text)] text-lg">⋯</button>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l1)"></span>L1 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l2)"></span>L2 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l3)"></span>L3 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l4)"></span>L4 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l5)"></span>L5 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l6)"></span>L6 ✓</span>
+          </div>
+          <div class="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
+            <span>Last indexed · 12m ago</span>
+            <button class="btn btn-ghost btn-sm">Re-index</button>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="font-serif font-semibold text-lg">billing-svc</div>
+              <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">https://github.com/org/billing-svc</div>
+            </div>
+            <button class="text-[var(--text-faint)] hover:text-[var(--text)] text-lg">⋯</button>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l1)"></span>L1 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l2)"></span>L2 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l3)"></span>L3 ✓</span>
+            <span class="pill pill-warn"><span class="dot" style="background:var(--l4)"></span>L4 missing CODEOWNERS</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l5)"></span>L5 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l6)"></span>L6 ✓</span>
+          </div>
+          <div class="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
+            <span>Last indexed · 1h ago</span>
+            <button class="btn btn-ghost btn-sm">Re-index</button>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="font-serif font-semibold text-lg">notification-svc</div>
+              <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">/Users/ajay/code/notification-svc</div>
+              <div class="mt-1 text-[11px] text-[var(--accent)]">⟳ indexing… 62%</div>
+            </div>
+            <button class="text-[var(--text-faint)] hover:text-[var(--text)] text-lg">⋯</button>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l1)"></span>L1 ✓</span>
+            <span class="pill pill-ok"><span class="dot" style="background:var(--l2)"></span>L2 ✓</span>
+            <span class="pill"><span class="dot" style="background:var(--l3)"></span>L3 …</span>
+            <span class="pill"><span class="dot" style="background:var(--l4)"></span>L4 …</span>
+            <span class="pill"><span class="dot" style="background:var(--l5)"></span>L5 queued</span>
+            <span class="pill"><span class="dot" style="background:var(--l6)"></span>L6 queued</span>
+          </div>
+          <div class="mt-4 flex items-center justify-between text-xs text-[var(--text-muted)]">
+            <span>Started · 2m ago</span>
+            <button class="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============ NEW RUN ============ -->
+    <section class="screen active" id="screen-new-run">
+      <div class="border-b border-[var(--border)] px-8 py-4 bg-[var(--bg-elevated)]">
+        <div class="font-serif text-2xl font-semibold">New run</div>
+        <div class="text-xs text-[var(--text-muted)] mt-0.5">Mesh parses, resolves references, checks confidence, then plans. Stage 0 happens before anything dispatches.</div>
+      </div>
+
+      <div class="p-8 max-w-5xl grid grid-cols-5 gap-6">
+
+        <!-- LEFT: input -->
+        <div class="col-span-2 space-y-5">
+          <div class="card p-5">
+            <label class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Intent</label>
+            <textarea class="input w-full mt-2 font-serif text-base" rows="6" placeholder="What do you want to change?">Rename `userId` → `accountId` in the auth service. Apply the same pattern to billing too.</textarea>
+
+            <div class="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Scope</label>
+                <select class="input w-full mt-2 text-sm">
+                  <option>Auto-detect</option>
+                  <option>Pick manually</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Provider</label>
+                <select class="input w-full mt-2 text-sm">
+                  <option>Claude Code</option>
+                  <option>Codex CLI</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center gap-2 text-sm">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked class="accent-[var(--accent)]">
+                <span class="text-xs">Dry run</span>
+              </label>
+            </div>
+
+            <div class="mt-5 pt-4 border-t border-[var(--border)] flex items-center gap-2">
+              <button class="btn btn-ghost btn-sm" style="flex: 1">Cancel</button>
+              <button class="btn btn-primary btn-sm" style="flex: 2; opacity: 0.5; cursor: not-allowed" title="Resolve disambiguation first">Plan ▶</button>
+            </div>
+            <div class="mt-2 text-[11px] text-[var(--warning)]">⚠ 1 reference needs confirmation before planning</div>
+          </div>
+
+          <!-- event store evidence -->
+          <div class="card p-5 text-xs">
+            <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium mb-3">Resolution drew from event store</div>
+            <div class="space-y-2 font-mono">
+              <div>
+                <span class="text-[var(--text-muted)]">→</span>
+                <span>run #041 · "Migrate /v1/users → /v2/accounts"</span>
+                <div class="text-[var(--text-muted)] text-[11px] ml-3 mt-0.5">precedent for "rename" pattern · 1d ago</div>
+              </div>
+              <div>
+                <span class="text-[var(--text-muted)]">→</span>
+                <span>node.selected = auth-service</span>
+                <div class="text-[var(--text-muted)] text-[11px] ml-3 mt-0.5">last graph view selection · 12s ago</div>
+              </div>
+            </div>
+            <div class="mt-3 text-[11px] text-[var(--text-faint)]">
+              Selective replay: 2 events retrieved out of 4,128 total · trace_id <span class="font-mono">trc-042-rsv</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: pipeline -->
+        <div class="col-span-3 space-y-3">
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium px-1">Stage 0 · Intent processing pipeline</div>
+
+          <!-- Stage 1: Parse -->
+          <div class="card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-[var(--success)] text-white text-xs flex items-center justify-center font-medium">1</span>
+                <span class="font-serif font-semibold">Parse intent</span>
+              </div>
+              <span class="pill pill-ok">12 ms</span>
+            </div>
+            <div class="mt-3 font-mono text-xs leading-6 bg-[var(--bg-subtle)] rounded-md p-3 border border-[var(--border)]">
+<div>{</div>
+<div>&nbsp;&nbsp;operation: <span style="color: var(--accent)">"rename"</span> + <span style="color: var(--accent)">"apply_pattern"</span>,</div>
+<div>&nbsp;&nbsp;entity:&nbsp;&nbsp;&nbsp;&nbsp;{ type: <span style="color: var(--l4)">"field"</span>, from: <span style="color: var(--l4)">"userId"</span>, to: <span style="color: var(--l4)">"accountId"</span> },</div>
+<div>&nbsp;&nbsp;scope:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;&lt;unresolved: <span class="diff-del">"the auth service"</span>&gt;,</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;&lt;unresolved: <span class="diff-del">"billing"</span>&gt;</div>
+<div>&nbsp;&nbsp;]</div>
+<div>}</div>
+            </div>
+          </div>
+
+          <!-- Stage 2: Resolve -->
+          <div class="card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-[var(--warning)] text-white text-xs flex items-center justify-center font-medium">2</span>
+                <span class="font-serif font-semibold">Resolve references</span>
+              </div>
+              <span class="pill pill-warn">1 / 2 resolved</span>
+            </div>
+            <div class="mt-4 space-y-3">
+              <!-- high confidence -->
+              <div class="border border-[var(--border)] rounded-md p-3">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono text-xs text-[var(--text-muted)]">"the auth service"</span>
+                    <span class="text-[var(--text-faint)]">→</span>
+                    <span class="font-mono font-medium">auth-service</span>
+                  </div>
+                  <span class="text-xs font-mono" style="color: var(--success)">0.95 ✓</span>
+                </div>
+                <div class="mt-2 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+                  <span class="pill" style="font-size: 10px">graph_match</span>
+                  <span class="pill" style="font-size: 10px">node.selected</span>
+                </div>
+                <div class="mt-2 h-1 rounded-full bg-[var(--bg-subtle)] overflow-hidden">
+                  <div style="width: 95%; height: 100%; background: var(--success)"></div>
+                </div>
+              </div>
+
+              <!-- low confidence -->
+              <div class="border rounded-md p-3" style="border-color: var(--warning); background: #faf3df">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono text-xs text-[var(--text-muted)]">"billing"</span>
+                    <span class="text-[var(--text-faint)]">→</span>
+                    <span class="font-mono font-medium" style="color: var(--warning)">?</span>
+                  </div>
+                  <span class="text-xs font-mono" style="color: var(--warning)">0.42 ⚠</span>
+                </div>
+                <div class="mt-2 flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+                  <span class="pill" style="font-size: 10px">3 candidates</span>
+                  <span class="pill" style="font-size: 10px">substring</span>
+                </div>
+                <div class="mt-2 h-1 rounded-full bg-[var(--bg-subtle)] overflow-hidden">
+                  <div style="width: 42%; height: 100%; background: var(--warning)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stage 3: Confidence check (open dialog) -->
+          <div class="card p-5" style="border-color: var(--accent)">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-[var(--accent)] text-white text-xs flex items-center justify-center font-medium">3</span>
+                <span class="font-serif font-semibold">Confidence check</span>
+              </div>
+              <span class="pill" style="background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft)">awaiting input</span>
+            </div>
+            <div class="mt-4 text-sm">
+              <div class="text-[var(--text)]">I'm not sure what <span class="font-mono">"billing"</span> means. Three candidates found in the org graph:</div>
+              <div class="mt-3 space-y-2">
+                <label class="flex items-center gap-3 p-3 border border-[var(--border)] rounded-md cursor-pointer hover:bg-[var(--bg-subtle)]" style="background: var(--bg-subtle); border-color: var(--accent)">
+                  <input type="radio" name="dis" checked class="accent-[var(--accent)]">
+                  <div class="flex-1">
+                    <div class="font-mono text-sm font-medium">billing-svc</div>
+                    <div class="text-[11px] text-[var(--text-muted)] mt-0.5">substring match · L3 contract producer · @payments owns</div>
+                  </div>
+                  <span class="text-xs font-mono text-[var(--text-muted)]">0.71</span>
+                </label>
+                <label class="flex items-center gap-3 p-3 border border-[var(--border)] rounded-md cursor-pointer hover:bg-[var(--bg-subtle)]">
+                  <input type="radio" name="dis" class="accent-[var(--accent)]">
+                  <div class="flex-1">
+                    <div class="font-mono text-sm font-medium">billing-pipeline</div>
+                    <div class="text-[11px] text-[var(--text-muted)] mt-0.5">substring match · ETL job · @data-team owns</div>
+                  </div>
+                  <span class="text-xs font-mono text-[var(--text-muted)]">0.34</span>
+                </label>
+                <label class="flex items-center gap-3 p-3 border border-[var(--border)] rounded-md cursor-pointer hover:bg-[var(--bg-subtle)]">
+                  <input type="radio" name="dis" class="accent-[var(--accent)]">
+                  <div class="flex-1">
+                    <div class="font-mono text-sm font-medium">@org/billing-sdk</div>
+                    <div class="text-[11px] text-[var(--text-muted)] mt-0.5">substring match · L2 package · type defs only</div>
+                  </div>
+                  <span class="text-xs font-mono text-[var(--text-muted)]">0.21</span>
+                </label>
+              </div>
+              <div class="mt-4 flex items-center gap-2">
+                <button class="btn btn-primary btn-sm">Confirm selection</button>
+                <button class="btn btn-ghost btn-sm">Refine intent instead</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stage 4: Execute (gated) -->
+          <div class="card p-5" style="opacity: 0.55">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-[var(--text-muted)] text-xs flex items-center justify-center font-medium">4</span>
+                <span class="font-serif font-semibold">Execute</span>
+              </div>
+              <span class="pill">gated · waiting on stage 3</span>
+            </div>
+            <div class="mt-2 text-xs text-[var(--text-muted)]">Hands the typed, confidence-checked intent to the Planner. From this point, no NL ambiguity remains in the run.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RUN VIEW ============ -->
+    <section class="screen" id="screen-run-view">
+      <div class="border-b border-[var(--border)] px-8 py-4 bg-[var(--bg-elevated)]">
+        <div class="flex items-baseline gap-3">
+          <div class="font-serif text-2xl font-semibold">Run #042</div>
+          <span class="pill pill-warn">live</span>
+        </div>
+        <div class="text-sm text-[var(--text-muted)] mt-1 font-serif italic">"Rename `userId` → `accountId` in the auth API contract."</div>
+
+        <!-- stepper -->
+        <div class="mt-5 flex items-center gap-1 text-sm">
+          <button data-stage="blast" class="stage-tab px-4 py-2 border-b-2 border-transparent font-medium">1 · Blast radius</button>
+          <span class="text-[var(--text-faint)] px-1">›</span>
+          <button data-stage="approval" class="stage-tab px-4 py-2 border-b-2 border-transparent font-medium">2 · Approval</button>
+          <span class="text-[var(--text-faint)] px-1">›</span>
+          <button data-stage="exec" class="stage-tab active px-4 py-2 border-b-2 font-medium" style="border-color: var(--accent)">3 · Execution</button>
+          <span class="text-[var(--text-faint)] px-1">›</span>
+          <button data-stage="validate" class="stage-tab px-4 py-2 border-b-2 border-transparent font-medium">4 · Validation</button>
+          <span class="text-[var(--text-faint)] px-1">›</span>
+          <button data-stage="diffs" class="stage-tab px-4 py-2 border-b-2 border-transparent font-medium">5 · Diffs</button>
+        </div>
+      </div>
+
+      <!-- Stage: Blast Radius -->
+      <div class="stage-content p-8 grid grid-cols-3 gap-6 max-w-7xl" data-stage="blast" style="display:none">
+
+        <div class="col-span-2 space-y-6">
+          <div class="card p-6">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Affected repositories</div>
+                <div class="font-serif text-xl font-semibold mt-1">8 repos · 1 producer · 7 consumers</div>
+              </div>
+              <span class="pill pill-warn">Risk · Medium</span>
+            </div>
+
+            <div class="mt-5 space-y-2">
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--l3)"></span>
+                <div class="font-medium font-mono text-sm">auth-service</div>
+                <span class="pill text-[10px]">producer</span>
+                <div class="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <span class="pill"><span class="dot" style="background:var(--l4)"></span>@auth-team</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">web-client</div>
+                <span class="text-xs text-[var(--text-muted)]">42 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill">@web-team</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">mobile-client</div>
+                <span class="text-xs text-[var(--text-muted)]">28 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill">@mobile-team</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">billing-svc</div>
+                <span class="text-xs text-[var(--text-muted)]">11 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill pill-warn">no contract tests</span>
+                  <span class="pill">@payments</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">notification-svc</div>
+                <span class="text-xs text-[var(--text-muted)]">9 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill">@platform-oncall</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">analytics-pipeline</div>
+                <span class="text-xs text-[var(--text-muted)]">17 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill pill-warn">downstream of billing</span>
+                  <span class="pill">@data-team</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2 border-b border-[var(--border)]">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">internal-admin</div>
+                <span class="text-xs text-[var(--text-muted)]">6 call sites</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill">@auth-team</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 py-2">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <div class="font-medium font-mono text-sm">@org/auth-sdk</div>
+                <span class="text-xs text-[var(--text-muted)]">type defs only</span>
+                <div class="ml-auto flex items-center gap-2 text-xs">
+                  <span class="pill">@auth-team</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-6">
+            <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Contract diff</div>
+            <div class="font-serif font-semibold mt-1">openapi/auth.yaml · GET /v1/sessions</div>
+            <div class="mt-3 font-mono text-xs leading-6 bg-[var(--bg-subtle)] rounded-md p-4 border border-[var(--border)]">
+<div>&nbsp;&nbsp;responses:</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;200:</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;schema:</div>
+<div class="diff-del">- &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;userId: { type: string }</div>
+<div class="diff-add">+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;accountId: { type: string }</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sessionId: { type: string }</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <div class="card p-6">
+            <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Risk score</div>
+            <div class="font-serif text-3xl font-semibold mt-1">Medium</div>
+            <div class="text-xs text-[var(--text-muted)] mt-2 leading-5">
+              Driven by:<br>
+              · 3 consumer repos lack contract tests<br>
+              · 1 transitive consumer (analytics) via billing<br>
+              · No backwards-compat alias planned
+            </div>
+          </div>
+
+          <div class="card p-6">
+            <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Rollout order (L5)</div>
+            <div class="mt-3 space-y-2 text-sm">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-xs flex items-center justify-center font-medium">1</span>
+                <span class="font-mono text-xs">auth-service</span>
+              </div>
+              <div class="ml-2 border-l border-dashed border-[var(--border-strong)] pl-4 py-1 space-y-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="w-5 h-5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-xs flex items-center justify-center font-medium">2</span>
+                  <span class="font-mono text-xs">web-client, mobile-client</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-5 h-5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-xs flex items-center justify-center font-medium">3</span>
+                  <span class="font-mono text-xs">billing-svc, notification-svc</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-5 h-5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-strong)] text-xs flex items-center justify-center font-medium">4</span>
+                  <span class="font-mono text-xs">analytics, internal-admin, sdk</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-6">
+            <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Affected tests (L6)</div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div><span class="font-serif text-2xl font-semibold">142</span><div class="text-[var(--text-muted)]">unit</div></div>
+              <div><span class="font-serif text-2xl font-semibold">38</span><div class="text-[var(--text-muted)]">integration</div></div>
+            </div>
+            <div class="text-xs text-[var(--text-muted)] mt-3">across 3 CI pipelines</div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <button class="btn btn-primary w-full" style="padding: 11px">Approve & dispatch agents</button>
+            <button class="btn btn-ghost w-full">Refine intent</button>
+            <button class="btn btn-ghost w-full" style="color: var(--danger)">Discard run</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage: Approval -->
+      <div class="stage-content p-8 max-w-3xl" data-stage="approval" style="display:none">
+        <div class="card p-8 text-center">
+          <div class="w-12 h-12 mx-auto rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-[var(--accent)] text-xl">✓</div>
+          <div class="font-serif text-2xl font-semibold mt-4">Approved</div>
+          <div class="text-sm text-[var(--text-muted)] mt-1">by <span class="font-mono">user@local</span> · 23 seconds ago</div>
+          <div class="text-xs text-[var(--text-muted)] mt-6 max-w-md mx-auto">
+            Temporal workflow signal <span class="font-mono">approveRun</span> received.
+            8 worktrees + 8 sandboxes allocated. Per-repo agents are dispatching now.
+          </div>
+          <div class="mt-6 flex justify-center gap-2">
+            <button class="btn btn-ghost btn-sm">Re-evaluate blast radius</button>
+            <button class="btn btn-ghost btn-sm">View signed approval</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage: Execution (the steering surface) -->
+      <div class="stage-content active p-8 max-w-7xl" data-stage="exec">
+
+        <!-- global control bar -->
+        <div class="card p-4 mb-5 flex items-center gap-4">
+          <div class="flex items-center gap-3">
+            <div class="font-serif text-lg font-semibold">Execution</div>
+            <span class="pill"><span class="dot pulse" style="background: var(--accent)"></span>3 / 8 done · 1 paused · 1 retrying · 3 in flight</span>
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="btn btn-ghost btn-sm">⏸ Pause all</button>
+            <button class="btn btn-ghost btn-sm">＋ Add repo</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('global-note').classList.toggle('open')">✎ Inject note</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger)">✕ Cancel run</button>
+          </div>
+        </div>
+
+        <!-- global inject-note panel (collapsed by default) -->
+        <div id="global-note" class="steer-box card p-4 mb-5" style="border-color: var(--accent)">
+          <div class="text-[11px] uppercase tracking-wide text-[var(--accent)] font-medium mb-2">Note to all agents (signal: <span class="font-mono">injectNote</span>)</div>
+          <textarea class="input w-full font-serif" rows="2" placeholder="e.g. Use snake_case for DB columns, camelCase for API fields.">Use snake_case for DB columns, camelCase for API fields. Don't add a backwards-compat alias.</textarea>
+          <div class="mt-2 flex justify-end gap-2">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('global-note').classList.remove('open')">Cancel</button>
+            <button class="btn btn-primary btn-sm">Send to all agents ▶</button>
+          </div>
+        </div>
+
+        <!-- agent grid -->
+        <div class="grid grid-cols-2 gap-4">
+
+          <!-- DONE -->
+          <div class="agent-panel card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--success)"></span>
+                <span class="font-mono font-medium text-sm">auth-service</span>
+              </div>
+              <span class="pill pill-ok">done</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">12 tool calls · diff +47 −42 · 1m 38s</div>
+            <div class="token-stream mt-3">
+              <div>$ grep -rn "userId" src/</div>
+              <div>$ edit src/handlers/session.ts</div>
+              <div>$ edit src/types/session.ts</div>
+              <div>$ edit src/db/migrations/0042_rename.sql</div>
+              <div class="new">✓ all 47 references updated</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">View diff</button>
+              <button class="btn btn-ghost btn-sm">Revert</button>
+            </div>
+          </div>
+
+          <!-- RUNNING -->
+          <div class="agent-panel card p-5" style="border-color: var(--accent-soft)">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot pulse" style="background: var(--accent)"></span>
+                <span class="font-mono font-medium text-sm">web-client</span>
+              </div>
+              <span class="pill" style="background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft)">running</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">working: <span class="font-mono">src/api/session.ts</span> · 8 tool calls · 0m 42s</div>
+            <div class="token-stream mt-3">
+              <div>$ grep -rn "userId" src/</div>
+              <div>$ read src/api/session.ts</div>
+              <div>$ read src/types/auth.ts</div>
+              <div class="new">Now I need to update the type definition for SessionResponse to use accountId instead of userId. The interface is exported, so I'll need to check…</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">⏸ Pause</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('steer-web').classList.toggle('open')">✎ Steer</button>
+              <button class="btn btn-ghost btn-sm">⊘ Skip</button>
+            </div>
+            <div id="steer-web" class="steer-box mt-3 pt-3 border-t border-[var(--border)]">
+              <div class="text-[11px] uppercase tracking-wide text-[var(--accent)] font-medium mb-2">Steer this agent (signal: <span class="font-mono">steerAgent</span>)</div>
+              <textarea class="input w-full text-sm" rows="2" placeholder="Append a user turn to this agent's session…">Use the existing AccountId type from @org/auth-types instead of redefining a string alias.</textarea>
+              <div class="mt-2 flex justify-end gap-2">
+                <button class="btn btn-ghost btn-sm" onclick="document.getElementById('steer-web').classList.remove('open')">Cancel</button>
+                <button class="btn btn-primary btn-sm">Send ▶</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RETRYING -->
+          <div class="agent-panel card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--warning)"></span>
+                <span class="font-mono font-medium text-sm">billing-svc</span>
+              </div>
+              <span class="pill pill-warn">retry 1 / 2</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">test failed: <span class="font-mono">idempotency_test</span> · restarting with extra context</div>
+            <div class="token-stream mt-3">
+              <div>$ run pytest tests/idempotency_test.py</div>
+              <div style="color: var(--danger)">✗ FAILED · KeyError: 'userId'</div>
+              <div class="new">Detected stale fixture. Restarting agent with hint: "update fixtures in tests/fixtures/sessions.json"</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">Stop retrying</button>
+              <button class="btn btn-ghost btn-sm">✎ Steer</button>
+              <button class="btn btn-ghost btn-sm">⊘ Skip</button>
+            </div>
+          </div>
+
+          <!-- PAUSED -->
+          <div class="agent-panel card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <span class="font-mono font-medium text-sm">analytics-pipeline</span>
+              </div>
+              <span class="pill">paused</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">stopped at: <span class="font-mono">resolving transitive ref via billing-svc</span> · 0m 55s in</div>
+            <div class="token-stream mt-3">
+              <div>$ grep -rn "userId" .</div>
+              <div>$ read pipelines/sessions_etl.py</div>
+              <div class="new">Hmm, this is a transitive reference — comes through billing-svc's events. Should I wait for billing-svc to settle first?</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-primary btn-sm">▶ Resume</button>
+              <button class="btn btn-ghost btn-sm">✎ Steer</button>
+              <button class="btn btn-ghost btn-sm">⊘ Skip</button>
+              <button class="btn btn-ghost btn-sm">⌥ Take over</button>
+            </div>
+          </div>
+
+          <!-- DONE 2 -->
+          <div class="agent-panel card p-5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--success)"></span>
+                <span class="font-mono font-medium text-sm">mobile-client</span>
+              </div>
+              <span class="pill pill-ok">done</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">9 tool calls · diff +8 −8 · 1m 12s</div>
+            <div class="token-stream mt-3">
+              <div>$ grep -rn "userId" src/</div>
+              <div>$ edit src/screens/Account.tsx</div>
+              <div class="new">✓ all 8 references updated · tests pass</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">View diff</button>
+              <button class="btn btn-ghost btn-sm">Revert</button>
+            </div>
+          </div>
+
+          <!-- IN FLIGHT -->
+          <div class="agent-panel card p-5" style="border-color: var(--accent-soft)">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot pulse" style="background: var(--accent)"></span>
+                <span class="font-mono font-medium text-sm">notification-svc</span>
+              </div>
+              <span class="pill" style="background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft)">running</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">working: <span class="font-mono">src/templates/welcome.tsx</span> · 5 tool calls · 0m 28s</div>
+            <div class="token-stream mt-3">
+              <div>$ grep -rn "userId" src/</div>
+              <div>$ read src/templates/welcome.tsx</div>
+              <div class="new">Updating template variables. The email templates pass userId into the rendering context, so I need to update the template tags too.</div>
+            </div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">⏸ Pause</button>
+              <button class="btn btn-ghost btn-sm">✎ Steer</button>
+              <button class="btn btn-ghost btn-sm">⊘ Skip</button>
+            </div>
+          </div>
+
+          <!-- QUEUED -->
+          <div class="agent-panel card p-5" style="opacity: 0.65">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <span class="font-mono font-medium text-sm">internal-admin</span>
+              </div>
+              <span class="pill">queued</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">waiting on: rollout-order gate (auth-service merge)</div>
+          </div>
+
+          <!-- SKIPPED -->
+          <div class="agent-panel card p-5" style="opacity: 0.65">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="dot" style="background: var(--text-faint)"></span>
+                <span class="font-mono font-medium text-sm">@org/auth-sdk</span>
+              </div>
+              <span class="pill pill-danger">skipped</span>
+            </div>
+            <div class="mt-3 text-xs text-[var(--text-muted)]">dropped via <span class="font-mono">dropRepo</span> signal · type-defs only, will regenerate from auth-service</div>
+            <div class="mt-3 flex gap-1.5">
+              <button class="btn btn-ghost btn-sm">Re-include</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- timeline -->
+        <div class="mt-6 card p-5">
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium mb-3">Steering log (this run)</div>
+          <div class="space-y-1.5 text-xs font-mono">
+            <div><span class="text-[var(--text-faint)]">00:00:23</span> &nbsp;<span class="text-[var(--text-muted)]">approveRun</span> &nbsp;run dispatched</div>
+            <div><span class="text-[var(--text-faint)]">00:00:24</span> &nbsp;<span class="text-[var(--text-muted)]">8 agents</span> &nbsp;spawned in parallel</div>
+            <div><span class="text-[var(--text-faint)]">00:01:12</span> &nbsp;<span style="color: var(--accent)">injectNote</span> &nbsp;"Use snake_case for DB columns…" → all 8 agents</div>
+            <div><span class="text-[var(--text-faint)]">00:01:48</span> &nbsp;<span style="color: var(--accent)">retryAgent</span> &nbsp;billing-svc · idempotency_test failed</div>
+            <div><span class="text-[var(--text-faint)]">00:02:05</span> &nbsp;<span style="color: var(--accent)">pauseAgent</span> &nbsp;analytics-pipeline · waiting on user input</div>
+            <div><span class="text-[var(--text-faint)]">00:02:31</span> &nbsp;<span style="color: var(--accent)">dropRepo</span> &nbsp;@org/auth-sdk · type-defs regen handled by producer</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage: Validation -->
+      <div class="stage-content p-8 max-w-6xl" data-stage="validate" style="display:none">
+        <div class="card p-6">
+          <div class="flex items-baseline justify-between">
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Validation</div>
+              <div class="font-serif text-xl font-semibold mt-1">142 / 142 unit · 36 / 38 integration</div>
+            </div>
+            <span class="pill pill-warn">2 flakes — re-running</span>
+          </div>
+          <div class="mt-5 grid grid-cols-2 gap-3 text-sm">
+            <div class="flex items-center justify-between p-3 border border-[var(--border)] rounded-md">
+              <span class="font-mono">auth-service</span>
+              <span class="pill pill-ok">42/42 · 12s</span>
+            </div>
+            <div class="flex items-center justify-between p-3 border border-[var(--border)] rounded-md">
+              <span class="font-mono">web-client</span>
+              <span class="pill pill-ok">28/28 · 8s</span>
+            </div>
+            <div class="flex items-center justify-between p-3 border border-[var(--border)] rounded-md">
+              <span class="font-mono">mobile-client</span>
+              <span class="pill pill-ok">14/14 · 6s</span>
+            </div>
+            <div class="flex items-center justify-between p-3 border border-[var(--border)] rounded-md">
+              <span class="font-mono">billing-svc</span>
+              <span class="pill pill-warn">22/24 · re-run</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage: Diffs -->
+      <div class="stage-content p-8 max-w-6xl" data-stage="diffs" style="display:none">
+
+        <div class="card overflow-hidden">
+          <div class="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-subtle)]">
+            <div>
+              <div class="font-serif font-semibold">8 local branches ready</div>
+              <div class="text-xs text-[var(--text-muted)] mt-0.5">POC · diffs are in worktrees. Push manually using the commands below.</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost btn-sm">Reject all</button>
+              <button class="btn btn-ghost btn-sm">Save as patch bundle</button>
+              <button class="btn btn-primary btn-sm">Copy push commands</button>
+            </div>
+          </div>
+
+          <div class="divide-y divide-[var(--border)]">
+            <details open class="px-6 py-4">
+              <summary class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-[var(--text-muted)]">▾</span>
+                  <span class="font-medium font-mono text-sm">auth-service</span>
+                  <span class="text-xs text-[var(--text-muted)] font-mono">mesh/rename-userid</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span style="color: var(--success)" class="font-mono">+47</span>
+                  <span style="color: var(--danger)" class="font-mono">−42</span>
+                  <span class="pill pill-ok">tests pass</span>
+                </div>
+              </summary>
+              <div class="mt-4 font-mono text-xs leading-6 bg-[var(--bg-subtle)] rounded-md p-4 border border-[var(--border)] overflow-x-auto">
+<div class="text-[var(--text-muted)]">--- a/src/handlers/session.ts</div>
+<div class="text-[var(--text-muted)]">+++ b/src/handlers/session.ts</div>
+<div class="text-[var(--text-muted)]">@@ -23,7 +23,7 @@</div>
+<div>&nbsp;&nbsp;export async function getSession(req: Request) {</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;const session = await db.sessions.findOne({ id: req.params.id });</div>
+<div class="diff-del">- &nbsp;&nbsp;return { userId: session.userId, sessionId: session.id };</div>
+<div class="diff-add">+ &nbsp;&nbsp;return { accountId: session.accountId, sessionId: session.id };</div>
+<div>&nbsp;&nbsp;}</div>
+              </div>
+            </details>
+
+            <details class="px-6 py-4">
+              <summary class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-[var(--text-muted)]">▸</span>
+                  <span class="font-medium font-mono text-sm">web-client</span>
+                  <span class="text-xs text-[var(--text-muted)] font-mono">mesh/rename-userid</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span style="color: var(--success)" class="font-mono">+12</span>
+                  <span style="color: var(--danger)" class="font-mono">−10</span>
+                  <span class="pill pill-ok">tests pass</span>
+                </div>
+              </summary>
+            </details>
+
+            <details class="px-6 py-4">
+              <summary class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-[var(--text-muted)]">▸</span>
+                  <span class="font-medium font-mono text-sm">mobile-client</span>
+                  <span class="text-xs text-[var(--text-muted)] font-mono">mesh/rename-userid</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span style="color: var(--success)" class="font-mono">+8</span>
+                  <span style="color: var(--danger)" class="font-mono">−8</span>
+                  <span class="pill pill-ok">tests pass</span>
+                </div>
+              </summary>
+            </details>
+
+            <details class="px-6 py-4">
+              <summary class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-[var(--text-muted)]">▸</span>
+                  <span class="font-medium font-mono text-sm">billing-svc</span>
+                  <span class="text-xs text-[var(--text-muted)] font-mono">mesh/rename-userid</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <span style="color: var(--success)" class="font-mono">+19</span>
+                  <span style="color: var(--danger)" class="font-mono">−14</span>
+                  <span class="pill pill-warn">1 retry</span>
+                </div>
+              </summary>
+            </details>
+          </div>
+        </div>
+
+        <div class="mt-6 card p-6">
+          <div class="text-[11px] uppercase tracking-wide text-[var(--text-muted)] font-medium">Suggested push order (from L5 deployment graph)</div>
+          <div class="mt-4 font-mono text-xs leading-6 bg-[var(--bg-subtle)] rounded-md p-4 border border-[var(--border)]">
+<div class="text-[var(--text-muted)]"># 1. Producer first</div>
+<div>cd ~/code/auth-service && git push -u origin mesh/rename-userid</div>
+<div></div>
+<div class="text-[var(--text-muted)]"># 2. Direct consumers (parallel)</div>
+<div>cd ~/code/web-client    && git push -u origin mesh/rename-userid</div>
+<div>cd ~/code/mobile-client && git push -u origin mesh/rename-userid</div>
+<div></div>
+<div class="text-[var(--text-muted)]"># 3. Downstream consumers</div>
+<div>cd ~/code/billing-svc      && git push -u origin mesh/rename-userid</div>
+<div>cd ~/code/notification-svc && git push -u origin mesh/rename-userid</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="screen" id="screen-history">
+      <div class="border-b border-[var(--border)] px-8 py-4 bg-[var(--bg-elevated)]">
+        <div class="font-serif text-2xl font-semibold">History</div>
+        <div class="text-xs text-[var(--text-muted)] mt-0.5">Past runs · feed for the memory layer</div>
+      </div>
+
+      <div class="p-8 max-w-6xl">
+        <div class="card overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-[var(--bg-subtle)] text-[var(--text-muted)] text-[11px] uppercase tracking-wide">
+              <tr>
+                <th class="text-left px-4 py-3 font-medium">Intent</th>
+                <th class="text-left px-4 py-3 font-medium">Repos</th>
+                <th class="text-left px-4 py-3 font-medium">Outcome</th>
+                <th class="text-left px-4 py-3 font-medium">Duration</th>
+                <th class="text-left px-4 py-3 font-medium">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-t border-[var(--border)] hover:bg-[var(--bg-subtle)] cursor-pointer">
+                <td class="px-4 py-3 font-medium">Rename userId → accountId</td>
+                <td class="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">8 affected</td>
+                <td class="px-4 py-3"><span class="pill pill-warn">running</span></td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">—</td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">just now</td>
+              </tr>
+              <tr class="border-t border-[var(--border)] hover:bg-[var(--bg-subtle)] cursor-pointer">
+                <td class="px-4 py-3 font-medium">Move auth tokens out of localStorage</td>
+                <td class="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">3 affected</td>
+                <td class="px-4 py-3"><span class="pill pill-ok">merged</span></td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">12m</td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">2h ago</td>
+              </tr>
+              <tr class="border-t border-[var(--border)] hover:bg-[var(--bg-subtle)] cursor-pointer">
+                <td class="px-4 py-3 font-medium">Migrate /v1/users → /v2/accounts</td>
+                <td class="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">5 affected</td>
+                <td class="px-4 py-3"><span class="pill pill-ok">merged</span></td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">28m</td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">yesterday</td>
+              </tr>
+              <tr class="border-t border-[var(--border)] hover:bg-[var(--bg-subtle)] cursor-pointer">
+                <td class="px-4 py-3 font-medium">Add idempotency keys to /charge</td>
+                <td class="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">2 affected</td>
+                <td class="px-4 py-3"><span class="pill pill-danger">discarded</span></td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">8m</td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">2 days ago</td>
+              </tr>
+              <tr class="border-t border-[var(--border)] hover:bg-[var(--bg-subtle)] cursor-pointer">
+                <td class="px-4 py-3 font-medium">Bump @org/auth-sdk to v3</td>
+                <td class="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">11 affected</td>
+                <td class="px-4 py-3"><span class="pill pill-ok">merged</span></td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">41m</td>
+                <td class="px-4 py-3 text-[var(--text-muted)]">3 days ago</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Screen switching
+  const navItems = document.querySelectorAll('.nav-item');
+  const screens = document.querySelectorAll('.screen');
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const target = item.dataset.screen;
+      navItems.forEach(n => n.classList.remove('active'));
+      item.classList.add('active');
+      screens.forEach(s => s.classList.toggle('active', s.id === `screen-${target}`));
+    });
+  });
+
+  // Run-view stage switching
+  document.querySelectorAll('.stage-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const stage = tab.dataset.stage;
+      document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.stage-content').forEach(c => {
+        const isMatch = c.dataset.stage === stage;
+        c.classList.toggle('active', isMatch);
+        c.style.display = isMatch ? '' : 'none';
+      });
+    });
+  });
+</script>
+</body>
+</html>

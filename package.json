@@ -1,0 +1,87 @@
+{
+  "name": "mesh-ai",
+  "productName": "Mesh",
+  "version": "0.1.0",
+  "description": "Mesh AI — local incident-tracker desktop app (investigation-first)",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "electron:dev": "concurrently -k -n vite,electron \"vite\" \"node scripts/dev-electron.mjs\"",
+    "build": "vite build && node scripts/build-main.mjs",
+    "build:main": "node scripts/build-main.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "test": "vitest run",
+    "rebuild:native": "node scripts/rebuild-native.mjs",
+    "sync:once": "node scripts/build-main.mjs && electron dist-electron/sync-once.js",
+    "postinstall": "node scripts/rebuild-native.mjs",
+    "dist": "npm run build && electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.adalat.mesh",
+    "productName": "Mesh",
+    "files": [
+      "dist-electron/**",
+      "dist/renderer/**",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/sqlite-vec*/**",
+      "node_modules/onnxruntime-node/**",
+      "node_modules/@anthropic-ai/claude-agent-sdk*/**",
+      "dist-electron/embed-worker.js"
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
+      "identity": null
+    },
+    "dmg": {
+      "title": "Mesh"
+    },
+    "directories": {
+      "output": "release"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.202",
+    "@huggingface/transformers": "^3.8.1",
+    "@linear/sdk": "^33.0.0",
+    "@slack/web-api": "^7.7.0",
+    "better-sqlite3": "^12.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sqlite-vec": "0.1.6",
+    "zod": "^4.4.3",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.24.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
+  }
+}

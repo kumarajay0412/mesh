@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-electron/
+*.tsbuildinfo
+*.log
+.DS_Store
+mesh.db
+mesh.db-*
+
+# packaged builds
+release/
+
+# real Adalat incident/ticket content (+ generated grading sheets) from
+# bench runs — not code, keep it out of history. README.md is docs, keep it.
+scripts/bench/tickets.json
+scripts/bench/results/
+scripts/bench/summary.md
+scripts/bench/key.md
+scripts/bench/grading.md
+
+# local Claude Code settings
+.claude/settings.local.json
