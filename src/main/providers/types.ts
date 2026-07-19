@@ -8,7 +8,10 @@ export interface ProviderCapabilities {
 
 export interface StartOptions {
   cwd: string
-  systemPrompt: string
+  /** Either a plain string, or a split prompt: `cached` is the invariant prefix
+   *  (prompt-cached cross-session via SYSTEM_PROMPT_DYNAMIC_BOUNDARY), `dynamic`
+   *  the per-investigation suffix. */
+  systemPrompt: string | { cached: string; dynamic: string }
   initialPrompt: string
   /** model override; undefined = provider default */
   model?: string
@@ -47,8 +50,9 @@ export interface Session {
   readonly sessionId: string | null
   /** usage totals, known once the session's result message arrives */
   readonly usage: SessionUsage | null
-  /** steering: append a user turn mid-flight */
-  send(text: string): void
+  /** steering: append a user turn mid-flight. Returns false if the session is
+   *  no longer accepting turns (closed/finished) — the turn was NOT delivered. */
+  send(text: string): boolean
   interrupt(): void
   /** resolves when the session ends (done/error) */
   readonly finished: Promise<void>

@@ -22,15 +22,15 @@ const when = (r: MemoryRecord): string => {
   return ts ? new Date(ts).toISOString().slice(0, 10) : '?'
 }
 
-/** One search hit → compact prompt-friendly text. Pure; unit-tested. */
+/** One search hit → compact prompt-friendly text. Pure; unit-tested.
+ *  Mesh's own past investigations are labeled as UNVERIFIED hypotheses so the
+ *  agent weights them as leads, not as human-confirmed ground truth. */
 export function formatHit(h: MemorySearchHit): string {
   const r = h.record
-  const lines = [
-    `[${r.identifier ?? r.id}] ${r.title} (${r.source} · ${when(r)} · matched: ${h.matched})`,
-    `  symptoms: ${clip(r.symptoms, 240) || '—'}`,
-  ]
-  if (r.rootCause) lines.push(`  root cause: ${clip(r.rootCause, 240)}`)
-  if (r.resolution) lines.push(`  fix: ${clip(r.resolution, 240)}`)
+  const provenance = r.source === 'mesh' ? 'prior Mesh investigation — UNVERIFIED hypothesis' : `${r.source} · ${when(r)}`
+  const lines = [`[${r.identifier ?? r.id}] ${r.title} (${provenance} · matched: ${h.matched})`, `  symptoms: ${clip(r.symptoms, 240) || '—'}`]
+  if (r.rootCause) lines.push(`  ${r.source === 'mesh' ? 'hypothesized cause' : 'root cause'}: ${clip(r.rootCause, 240)}`)
+  if (r.resolution) lines.push(`  ${r.source === 'mesh' ? 'suggested fix' : 'fix'}: ${clip(r.resolution, 240)}`)
   return lines.join('\n')
 }
 
@@ -84,7 +84,10 @@ export function buildMemoryMcp(db: Database, vecAvailable: boolean, embeddings: 
         },
         async ({ query, limit }) => {
           const r = await searchMemory(db, vecAvailable, embeddings, query)
-          const hits = r.hits.filter((h) => !self || (h.record.identifier ?? '').toUpperCase() !== self).slice(0, limit ?? 6)
+          // exclude the ticket itself AND any prior Mesh investigation of it
+          const hits = r.hits
+            .filter((h) => !self || ((h.record.identifier ?? '').toUpperCase() !== self && (h.record.ticketId ?? '').toUpperCase() !== self))
+            .slice(0, limit ?? 6)
           const note = r.semantic ? '' : '\n(lexical-only — semantic index unavailable right now)'
           return {
             content: [{ type: 'text' as const, text: hits.length ? hits.map(formatHit).join('\n---\n') + note : `no matches in memory${note}` }],

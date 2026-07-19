@@ -21,6 +21,13 @@ if (process.platform === 'darwin') {
   process.env.PATH = [...new Set([...(process.env.PATH ?? '').split(':'), ...extras])].filter(Boolean).join(':')
 }
 
+// Refuse if the GUI app is already running against this DB — otherwise two
+// schedulers walk it concurrently. Use the app's Refresh instead.
+if (!app.requestSingleInstanceLock()) {
+  console.error('Mesh is already running — close it (or use its Refresh button) before running sync:once')
+  app.exit(1)
+}
+
 await app.whenReady()
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'))

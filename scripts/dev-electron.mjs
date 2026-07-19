@@ -55,11 +55,7 @@ function waitForPort(port) {
   })
 }
 
-function spawnElectron() {
-  if (electronChild) {
-    electronChild.removeAllListeners('exit')
-    electronChild.kill()
-  }
+function startElectron() {
   electronChild = spawn('npx', ['electron', '.'], {
     stdio: 'inherit',
     env: { ...process.env, VITE_DEV_SERVER_URL: `http://localhost:${VITE_PORT}` },
@@ -68,6 +64,20 @@ function spawnElectron() {
     // Window closed by the user → end the dev session cleanly.
     process.exit(code ?? 0)
   })
+}
+
+function spawnElectron() {
+  // The app now holds a single-instance lock in userData; the new instance must
+  // wait for the old one to EXIT (and release the lock) before starting, or it
+  // sees the lock held and quits immediately — killing the hot-reload loop.
+  if (electronChild) {
+    const old = electronChild
+    old.removeAllListeners('exit')
+    old.once('exit', () => startElectron())
+    old.kill()
+  } else {
+    startElectron()
+  }
 }
 
 const contexts = await Promise.all(

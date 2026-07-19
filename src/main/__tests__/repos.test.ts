@@ -23,11 +23,11 @@ beforeEach(() => {
 describe('migrations', () => {
   it('creates the Section 8 tables and is idempotent', () => {
     const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type IN ('table','virtual table') OR type='table'`).all() as { name: string }[]).map((t) => t.name)
-    for (const t of ['services', 'repos', 'investigations', 'events', 'memory', 'sync_state', 'links', 'secrets', 'settings', 'sessions', 'learnings', 'map_nodes', 'map_edges']) {
+    for (const t of ['services', 'repos', 'investigations', 'events', 'memory', 'sync_state', 'links', 'secrets', 'settings', 'sessions', 'learnings', 'map_nodes', 'map_edges', 'slack_threads']) {
       expect(tables).toContain(t)
     }
     migrate(db) // second run: no-op, no throw
-    expect(db.pragma('user_version', { simple: true })).toBe(6)
+    expect(db.pragma('user_version', { simple: true })).toBe(8)
   })
 
   it('learnings embedding queue: accept → pending → embedded', () => {

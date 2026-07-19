@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MapEdge, MapNode, MapNodeKind } from '@shared/types'
 import { getApi } from '../lib/api'
 import { Button, Modal, Pill, TextArea } from '../components/ui'
+import { ContextPanel } from '../components/map/ContextPanel'
 
 // Layered layout: data flows left → right, the way the org actually flows.
 const COLUMNS: MapNodeKind[][] = [['frontend'], ['edge'], ['backend'], ['ml'], ['external', 'datastore'], ['infra']]
@@ -48,6 +49,7 @@ export function KnowledgeMap() {
   // Universal seeding: paste YOUR architecture description, an LLM extracts
   // nodes + edges. Mesh ships with an empty map — no org baked in.
   const [seedOpen, setSeedOpen] = useState(false)
+  const [contextOpen, setContextOpen] = useState(false)
   const [seedText, setSeedText] = useState('')
   const [seedBusy, setSeedBusy] = useState(false)
   const [seedError, setSeedError] = useState<string | null>(null)
@@ -119,6 +121,9 @@ export function KnowledgeMap() {
             <h1 className="font-display text-[19px] font-semibold tracking-tight text-txt">Knowledge map</h1>
           </div>
           <div className="flex-1" />
+          <Button variant="quiet" onClick={() => setContextOpen(true)}>
+            What Mesh knows
+          </Button>
           <Button variant="quiet" onClick={() => setSeedOpen(true)}>
             Seed from description
           </Button>
@@ -297,6 +302,8 @@ export function KnowledgeMap() {
           </div>
         </aside>
       )}
+
+      {contextOpen && <ContextPanel onClose={() => setContextOpen(false)} />}
 
       {seedOpen && (
         <Modal open onClose={() => setSeedOpen(false)} width={560}>

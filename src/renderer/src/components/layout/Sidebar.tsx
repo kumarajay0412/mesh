@@ -12,9 +12,11 @@ interface NavItem {
   icon: ReactNode
 }
 
-const I = (d: string) => (
+const I = (...ds: string[]) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d={d} />
+    {ds.map((d, i) => (
+      <path key={i} d={d} />
+    ))}
   </svg>
 )
 
@@ -24,7 +26,14 @@ const NAV: NavItem[] = [
   { id: 'registry', label: 'Service registry', icon: I('M4 7h16M4 12h16M4 17h16M8 4v16') },
   { id: 'map', label: 'Knowledge map', icon: I('M6 6m-2 0a2 2 0 104 0 2 2 0 10-4 0M18 6m-2 0a2 2 0 104 0 2 2 0 10-4 0M12 18m-2 0a2 2 0 104 0 2 2 0 10-4 0M7.5 7.5L10.5 16M16.5 7.5L13.5 16M8 6h8') },
   { id: 'connections', label: 'Connections', icon: I('M9 12l2 2 4-4M4 6h16v12H4z') },
-  { id: 'settings', label: 'Settings', icon: I('M12 15a3 3 0 100-6 3 3 0 000 6zM19 12a7 7 0 00-.1-1l2-1.6-2-3.4-2.3 1a7 7 0 00-1.7-1L14.5 2h-5l-.4 2.4a7 7 0 00-1.7 1l-2.3-1-2 3.4L3.1 11a7 7 0 000 2l-2 1.6 2 3.4 2.3-1a7 7 0 001.7 1l.4 2.4h5l.4-2.4a7 7 0 001.7-1l2.3 1 2-3.4-2-1.6a7 7 0 00.1-1z') },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: I(
+      'M12 9a3 3 0 100 6 3 3 0 000-6z',
+      'M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z',
+    ),
+  },
 ]
 
 export function Sidebar() {
@@ -68,6 +77,14 @@ export function Sidebar() {
       </div>
 
       <div className="flex-1" />
+
+      <button
+        onClick={() => useApp.getState().setTour(true)}
+        className="no-drag mx-2.5 mb-1 flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-subtle transition-colors duration-100 hover:bg-ink-800 hover:text-muted"
+      >
+        {I('M12 17h.01', 'M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3', 'M12 3a9 9 0 100 18 9 9 0 000-18z')}
+        <span className="font-medium">Tutorial</span>
+      </button>
 
       <div className="m-2.5 rounded-md border border-line bg-ink-800 p-3">
         <div className="flex items-center justify-between">

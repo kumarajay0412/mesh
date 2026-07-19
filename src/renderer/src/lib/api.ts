@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  ContextSummary,
   ApprovalRequest,
   ConnectionInfo,
   GrafanaInstance,
@@ -80,6 +81,7 @@ export interface MeshApi {
   addMapEdge(from: string, to: string, label: string | undefined, kind: MapEdge['kind']): Promise<void>
   decideMapEdge(id: number, accept: boolean): Promise<void>
   seedMapFromText(text: string): Promise<{ ok: true; nodes: number; edges: number } | { ok: false; message: string }>
+  getContextSummary(): Promise<ContextSummary>
 
   // approvals
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void

@@ -195,4 +195,27 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sessions ADD COLUMN cost_usd           REAL;
   ALTER TABLE sessions ADD COLUMN num_turns          INTEGER;
   `,
+
+  // v7 — Slack thread activity tracking. A thread's HEAD timestamp never
+  // changes when replies arrive, so the old skip-unchanged check (keyed on
+  // head ts) froze every thread at its first-sync snapshot — the diagnosis in
+  // later replies never re-entered memory. We now track reply_count per thread
+  // so the trailing re-scan only re-fetches replies (and re-distills) when a
+  // thread has actually gained replies.
+  `
+  CREATE TABLE slack_threads (
+    ts          TEXT PRIMARY KEY,
+    reply_count INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+  `,
+
+  // v8 — cross-source linking. A Linear ticket and the Slack thread about the
+  // same outage were walked by separate sync passes, so the linker never saw
+  // both sides and each became its own divergent memory row. We now cross-link
+  // them against the DB on ingest (by permalink / identifier) and collapse the
+  // linked sibling at search time so one outage surfaces once.
+  `
+  ALTER TABLE memory ADD COLUMN linked_id TEXT;
+  `,
 ]

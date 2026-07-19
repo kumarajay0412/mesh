@@ -29,6 +29,24 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
 // independent of branding or packaging.
 app.setPath('userData', join(app.getPath('appData'), 'mesh-ai'))
 
+// Single instance per mesh.db. The lock lives in userData (pinned above), so a
+// second copy — the dev build AND the packaged DMG both point here — is refused
+// and quits. Without this, two schedulers walk the same DB concurrently:
+// duplicate API spend, and one boot's resetStale() un-marks the other's live
+// run. Must come AFTER setPath so the lock is scoped to the shared data dir.
+if (!app.requestSingleInstanceLock()) {
+  l.warn('another Mesh instance already owns this data directory — quitting')
+  app.quit()
+  process.exit(0)
+}
+app.on('second-instance', () => {
+  const w = BrowserWindow.getAllWindows()[0]
+  if (w) {
+    if (w.isMinimized()) w.restore()
+    w.focus()
+  }
+})
+
 // Finder-launched apps inherit a bare PATH (/usr/bin:/bin) — the spawns that
 // power repo sync (gh, git), Codex, and npx-based MCP servers would silently
 // vanish in the packaged app. Augment with the usual install locations.

@@ -5,80 +5,93 @@ import { log } from '../log'
 
 const l = log('sync:slack')
 const PAGE = 100
+// How far back to re-scan every walk. Slack's conversations.history won't
+// re-surface a thread head once the cursor passes it, so late replies (the
+// diagnosis!) would never be seen — we re-walk a trailing window and let the
+// reply-count tracker make re-fetches cheap. Incidents can take days to
+// resolve, so the window is generous.
+const RESCAN_MS = 14 * 24 * 60 * 60 * 1000
 
 /**
- * Incremental #reporting pull (Section 7.1): channel history with oldest > cursor,
- * plus every touched thread's replies — the diagnosis is in the thread.
+ * Incremental channel pull (Section 7.1): channel history with a trailing
+ * re-scan window, plus each CHANGED thread's replies — the diagnosis is in the
+ * replies, which arrive long after the head.
  *
- * CURSOR CONTRACT (same as linear.ts): history arrives newest-first, so the
- * cursor is returned and persisted by the caller ONLY after the walk
- * completes — never per page. Crash ⇒ re-walk, absorbed by idempotency.
+ * `threadChanged(ts, replyCount)` (backed by the slack_threads tracker) decides
+ * whether a thread is new/changed and worth fetching replies + re-emitting;
+ * unchanged threads are skipped entirely, so the trailing re-scan is cheap.
+ *
+ * CURSOR CONTRACT (same as linear.ts): the cursor is returned and persisted by
+ * the caller ONLY after the walk completes — never per page.
  */
 export async function fetchSlackSince(
   token: string,
   channelRef: string,
   cursor: string | undefined,
+  threadChanged: (ts: string, replyCount: number) => boolean,
   onPage: (threads: RawThread[]) => Promise<void>,
 ): Promise<string | undefined> {
   const client = new WebClient(token)
-  // The API wants a channel ID (C0…), but humans type "#reporting" —
-  // resolve names via conversations.list (needs channels:read).
   const channel = await resolveChannelId(client, channelRef)
+  const teamDomain = await resolveTeamDomain(client) // once per walk, for permalinks
   let pageCursor: string | undefined
   let pages = 0
-  let globalMax = cursor ? parseFloat(cursor) : 0
+  const cursorSec = cursor ? parseFloat(cursor) : 0
+  let globalMax = cursorSec
+
+  // Re-scan the trailing window even below the cursor so threads that gained
+  // replies get re-checked; the tracker keeps this from re-doing work.
+  const rescanFloorSec = (Date.now() - RESCAN_MS) / 1000
+  const oldest = cursor ? String(Math.min(cursorSec, rescanFloorSec)) : undefined
 
   for (;;) {
-    const res = await client.conversations.history({
-      channel,
-      oldest: cursor,
-      limit: PAGE,
-      cursor: pageCursor,
-      inclusive: false,
-    })
+    const res = await client.conversations.history({ channel, oldest, limit: PAGE, cursor: pageCursor, inclusive: false })
 
     const messages = (res.messages ?? []) as { ts?: string; text?: string; thread_ts?: string; user?: string; reply_count?: number }[]
     const threads: RawThread[] = []
-    let maxTs = cursor ? parseFloat(cursor) : 0
+    let maxTs = cursorSec
 
     for (const m of messages) {
       if (!m.ts) continue
       const ts = parseFloat(m.ts)
       if (ts > maxTs) maxTs = ts
-      // Only thread heads (or standalone messages) become incidents;
-      // replies are fetched with their head below.
+      // Only thread heads (or standalone messages) become incidents; replies
+      // are fetched with their head below.
       if (m.thread_ts && m.thread_ts !== m.ts) continue
-      // Bot noise (Slackbot reminders, join/leave, empty) never becomes memory.
       if (isNoiseMessage(m.text ?? '', m.reply_count ?? 0)) continue
 
+      const replyCount = m.reply_count ?? 0
+      // Cheap skip: reply_count comes free in the history payload — only pay
+      // for conversations.replies (Tier-3) when the thread is new or changed.
+      if (!threadChanged(m.ts, replyCount)) continue
+
+      const headMs = Math.round(ts * 1000)
       let replies: RawComment[] = []
-      if (m.reply_count && m.reply_count > 0) {
+      let latestActivityAt = headMs
+      if (replyCount > 0) {
         const rep = await client.conversations.replies({ channel, ts: m.ts, limit: 200 })
         replies = ((rep.messages ?? []) as { ts?: string; text?: string; user?: string }[])
           .filter((r) => r.ts !== m.ts)
-          .map((r) => ({ body: stripSlackMarkup(r.text ?? ''), author: r.user, createdAt: r.ts ? Math.round(parseFloat(r.ts) * 1000) : 0 }))
-      }
-
-      let permalink: string | undefined
-      try {
-        const p = await client.chat.getPermalink({ channel, message_ts: m.ts })
-        permalink = p.permalink as string | undefined
-      } catch {
-        /* permalink is a nicety, not a requirement */
+          .map((r) => {
+            const at = r.ts ? Math.round(parseFloat(r.ts) * 1000) : 0
+            if (at > latestActivityAt) latestActivityAt = at
+            return { body: stripSlackMarkup(r.text ?? ''), author: r.user, createdAt: at }
+          })
       }
 
       threads.push({
         channel,
         ts: m.ts,
-        permalink,
+        permalink: buildPermalink(teamDomain, channel, m.ts),
         text: stripSlackMarkup(m.text ?? ''),
         replies,
-        createdAt: Math.round(parseFloat(m.ts) * 1000),
+        createdAt: headMs,
+        replyCount,
+        latestActivityAt,
       })
     }
 
     if (maxTs > globalMax) globalMax = maxTs
-
     if (threads.length > 0) {
       await onPage(threads)
       pages++
@@ -88,10 +101,28 @@ export async function fetchSlackSince(
     if (!pageCursor) break
   }
 
-  l.info(`fetched ${pages} page(s) from ${channelRef} since ${cursor ?? 'beginning'}`)
-  return globalMax > 0 ? String(globalMax) : cursor
+  l.info(`fetched ${pages} page(s) of changed threads from ${channelRef} since ${cursor ?? 'beginning'}`)
+  return globalMax > cursorSec ? String(globalMax) : cursor
 }
 
+/** Permalink without an API call: https://<team>.slack.com/archives/<chan>/p<ts> */
+function buildPermalink(teamDomain: string | undefined, channel: string, ts: string): string | undefined {
+  if (!teamDomain) return undefined
+  return `https://${teamDomain}.slack.com/archives/${channel}/p${ts.replace('.', '')}`
+}
+
+/** Team subdomain for permalink construction — one auth.test per walk. */
+async function resolveTeamDomain(client: WebClient): Promise<string | undefined> {
+  try {
+    const res = await client.auth.test()
+    const url = res.url as string | undefined // https://myteam.slack.com/
+    return url?.match(/https:\/\/([^.]+)\.slack\.com/)?.[1]
+  } catch {
+    return undefined // permalink is a nicety, not a requirement
+  }
+}
+
+/** "#reporting" | "reporting" → C0… id; already-an-id passes through. */
 export interface SlackChannelOption {
   id: string
   name: string
@@ -134,7 +165,6 @@ export function friendlySlackError(e: unknown): string {
   return (e as Error)?.message ?? 'unknown error'
 }
 
-/** "#reporting" | "reporting" → C0… id; already-an-id passes through. */
 async function resolveChannelId(client: WebClient, ref: string): Promise<string> {
   const clean = ref.replace(/^#/, '').trim()
   if (/^[CG][A-Z0-9]{6,}$/.test(clean)) return clean

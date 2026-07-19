@@ -53,6 +53,31 @@ export function investigationsRepo(db: Database) {
       return `INV-${String(n).padStart(3, '0')}`
     },
 
+    /** Reserve the next id AND insert its row atomically (no await between —
+     *  better-sqlite3 is synchronous), so two concurrent start() calls can't
+     *  compute the same INV-nnn and collide on the primary key. Returns the id. */
+    reserve(seed: { title: string; source: Investigation['source']; ticketRef?: string; createdAt: number }): string {
+      const tx = db.transaction(() => {
+        const id = this.nextId()
+        db.prepare(
+          `INSERT INTO investigations (id, title, service, status, stage, confidence, source, ticket_ref, similar_json, report_json, session_id, created_at, closed_at)
+           VALUES (?, ?, NULL, 'investigating', 'intake', NULL, ?, ?, '[]', NULL, NULL, ?, NULL)`,
+        ).run(id, seed.title, seed.source, seed.ticketRef ?? null, seed.createdAt)
+        return id
+      })
+      return tx()
+    },
+
+    /** Patch the metadata computed after intake (title/service/similar). */
+    updateMeta(id: string, meta: { title?: string; service?: string; similarTo?: { id: string; note: string }[] }): void {
+      db.prepare(`UPDATE investigations SET title = coalesce(?, title), service = coalesce(?, service), similar_json = coalesce(?, similar_json) WHERE id = ?`).run(
+        meta.title ?? null,
+        meta.service ?? null,
+        meta.similarTo ? JSON.stringify(meta.similarTo) : null,
+        id,
+      )
+    },
+
     create(inv: Investigation): void {
       db.prepare(
         `INSERT INTO investigations (id, title, service, status, stage, confidence, source, ticket_ref, similar_json, report_json, session_id, created_at, closed_at)

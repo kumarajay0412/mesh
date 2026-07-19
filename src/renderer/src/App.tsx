@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { TitleBar } from './components/layout/TitleBar'
 import { Sidebar } from './components/layout/Sidebar'
 import { ApprovalModal } from './components/approval/ApprovalModal'
+import { Tour } from './components/onboarding/Tour'
 import { useApp } from './stores/app'
 import { useSettings } from './stores/settings'
 import { Investigations } from './screens/Investigations'
@@ -43,6 +44,8 @@ export default function App() {
       </div>
       {/* Section 10: the per-action gate lives above everything, always mounted */}
       <ApprovalModal />
+      {/* onboarding: auto-opens on first run; the sidebar Tutorial button reopens it */}
+      <Tour />
     </div>
   )
 }

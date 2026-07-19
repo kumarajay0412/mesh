@@ -137,6 +137,9 @@ export class IpcApi implements MeshApi {
   seedMapFromText(text: string) {
     return invoke('map:seedFromText', { text })
   }
+  getContextSummary() {
+    return invoke('context:summary', undefined)
+  }
 
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void {
     return on('approval:request', cb)

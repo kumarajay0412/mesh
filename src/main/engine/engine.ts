@@ -24,7 +24,7 @@ import { expandHome, scanGitRepos } from '../repos/workspace'
 import { findIssueIdByIdentifier, postLinearComment } from '../sync/linear'
 import { runIntake } from './intake'
 import { buildMemoryMcp } from './memory-tools'
-import { buildSystemPrompt } from './runbook'
+import { buildDynamicContext, staticRunbook } from './runbook'
 import { formatReportComment } from './report-format'
 import { extractReport } from './report-schema'
 import { extractSignature } from '../memory/signature'
@@ -47,8 +47,9 @@ export class Engine {
   private sessions = new Map<string, Session>()
   /** accumulated assistant text per investigation — the report is parsed from it */
   private transcripts = new Map<string, string>()
-  /** prompts kept for the wedge-retry path */
-  private prompts = new Map<string, { system: string; initial: string }>()
+  /** prompts kept for the wedge-retry + feedback path. Split so the invariant
+   *  runbook prefix (cached) is prompt-cached cross-session. */
+  private prompts = new Map<string, { systemCached: string; systemDynamic: string; initial: string }>()
   /** investigations whose session died on the duplicate-tool_use SDK glitch */
   private wedged = new Set<string>()
   private retried = new Set<string>()
@@ -67,7 +68,15 @@ export class Engine {
     const services = servicesRepo(db)
     const provider = this.deps.provider()
 
-    const id = invs.nextId()
+    // Reserve id + insert the row ATOMICALLY before any await — otherwise two
+    // concurrent start() calls compute the same INV-nnn and the second throws
+    // a primary-key violation after paying for its intake.
+    const id = invs.reserve({
+      title: input.title ?? input.ticketRef ?? 'Investigating…',
+      source: input.ticketRef ? 'linear' : 'manual',
+      ticketRef: input.ticketRef,
+      createdAt: Date.now(),
+    })
 
     // — Stage 1 · Intake
     // If the ticket is already ingested (ENG-2903 …), pull its content from
@@ -85,8 +94,12 @@ export class Engine {
     // The ticket under investigation is itself in memory — drop the self-match
     // so it can't eat a similar-incident slot (its full content is injected
     // separately below).
+    // Exclude BOTH the ticket itself AND any prior Mesh investigation of it
+    // (mesh rows carry ticketId = the ENG-#### under investigation).
     const selfId = ticketMatch?.[1]?.toUpperCase()
-    const similarHits = similar.hits.filter((h) => !selfId || (h.record.identifier ?? '').toUpperCase() !== selfId)
+    const isSelf = (h: (typeof similar.hits)[number]) =>
+      !!selfId && ((h.record.identifier ?? '').toUpperCase() === selfId || (h.record.ticketId ?? '').toUpperCase() === selfId)
+    const similarHits = similar.hits.filter((h) => !isSelf(h))
 
     // — Stage 2 · Scope (v1-lite: auto-resolve mentions via the registry)
     const resolved = intake.serviceMentions
@@ -94,15 +107,10 @@ export class Engine {
       .filter((s): s is NonNullable<typeof s> => s !== null)
     const uniqueServices = [...new Map(resolved.map((s) => [s.name, s])).values()]
 
-    invs.create({
-      id,
+    // Row already exists (reserved above) — patch in the intake-derived meta.
+    invs.updateMeta(id, {
       title: intake.title,
       service: uniqueServices[0]?.name,
-      status: 'investigating',
-      stage: 'intake',
-      source: input.ticketRef ? 'linear' : 'manual',
-      ticketRef: input.ticketRef,
-      createdAt: Date.now(),
       similarTo: similarHits.slice(0, 3).map((h) => ({ id: h.record.identifier ?? h.record.id, note: h.record.title.slice(0, 60) })),
     })
     events.append(id, 'intake.parsed', intake)
@@ -153,20 +161,24 @@ export class Engine {
     // user-approved learned context: relevance-selected for these symptoms
     // (small libraries inject whole; large ones retrieve top-K + newest)
     const learned = await selectLearnings(db, this.deps.vecAvailable, this.deps.embeddings, intake.symptoms)
-    let systemPrompt = buildSystemPrompt(uniqueServices, similarHits, intake.timeWindow, learned)
-    // the org's topology rides in every session — the agent starts knowing the flows
-    systemPrompt += `\n\n${mapRepo(db).promptText()}`
+
+    // CACHED prefix — session-stable, byte-identical across investigations in a
+    // period, so it rides the prompt cache: the runbook + the org topology + the
+    // repos list. (Sentry note is appended in spawnSession — also session-stable.)
+    let systemCached = staticRunbook()
+    systemCached += `\n\n${mapRepo(db).promptText()}`
     if (repoNames.length > 0) {
-      systemPrompt += `\n\nREPOS AVAILABLE (read-only checkouts, cwd = ${repoRoot}):\n${repoNames.map((r) => `- ${r}/`).join('\n')}\nUse git log/blame/show and rg inside these to correlate symptoms to commits and name the exact file:line.`
+      systemCached += `\n\nREPOS AVAILABLE (read-only checkouts, cwd = ${repoRoot}):\n${repoNames.map((r) => `- ${r}/`).join('\n')}\nUse git log/blame/show and rg inside these to correlate symptoms to commits and name the exact file:line.`
     } else {
-      systemPrompt += `\n\nNOTE: no repos found under ${repoRoot} — code-level pinpointing is degraded; say so in the report.`
+      systemCached += `\n\nNOTE: no repos found under ${repoRoot} — code-level pinpointing is degraded; say so in the report.`
     }
 
-    // Ticket content travels IN the prompt — linear.app cannot be fetched
-    // (auth-walled SPA), and the ingested record already has everything.
+    // DYNAMIC suffix — per-investigation: learnings + candidate registry +
+    // similar incidents + time window + the ticket under investigation.
+    let systemDynamic = buildDynamicContext(uniqueServices, similarHits, intake.timeWindow, learned)
     if (ticketRecord) {
       const comments = ticketRecord.rawCommentsJson ? boundedComments(ticketRecord.rawCommentsJson) : ''
-      systemPrompt += `\n\nTHE TICKET UNDER INVESTIGATION (${ticketRecord.identifier} — full content, already fetched; do NOT WebFetch linear.app):\ntitle: ${ticketRecord.title}\nsymptoms: ${ticketRecord.symptoms}${ticketRecord.labels.length ? `\nlabels: ${ticketRecord.labels.join(', ')}` : ''}${comments ? `\n--- discussion so far ---\n${comments}` : ''}`
+      systemDynamic += `\n\nTHE TICKET UNDER INVESTIGATION (${ticketRecord.identifier} — full content, already fetched; do NOT WebFetch linear.app):\ntitle: ${ticketRecord.title}\nsymptoms: ${ticketRecord.symptoms}${ticketRecord.labels.length ? `\nlabels: ${ticketRecord.labels.join(', ')}` : ''}${comments ? `\n--- discussion so far ---\n${comments}` : ''}`
     }
     this.setStage(id, 'investigate')
     const initialPrompt = [
@@ -178,7 +190,7 @@ export class Engine {
       .filter(Boolean)
       .join('\n')
 
-    this.prompts.set(id, { system: systemPrompt, initial: initialPrompt })
+    this.prompts.set(id, { systemCached, systemDynamic, initial: initialPrompt })
     this.spawnSession(id, invs.getSessionId(id) ?? undefined)
 
     return { id }
@@ -215,9 +227,11 @@ export class Engine {
     }
 
     this.transcripts.set(id, '')
+    // Sentry note is session-stable → part of the cached prefix.
+    const cached = p.systemCached + (sentryToken ? '\n\nSENTRY: live Sentry tools are available (mcp: sentry) — use them for issue details, events, stack traces, and firstSeen/release data.' : '')
     const session = provider.start({
       cwd: repoRoot,
-      systemPrompt: p.system + (sentryToken ? '\n\nSENTRY: live Sentry tools are available (mcp: sentry) — use them for issue details, events, stack traces, and firstSeen/release data.' : ''),
+      systemPrompt: { cached, dynamic: p.systemDynamic },
       initialPrompt: p.initial,
       model: settings.model || undefined,
       effort: settings.effort,
@@ -243,21 +257,22 @@ export class Engine {
     })
   }
 
-  steer(id: string, text: string): void {
-    this.push(id, { kind: 'steered', text, ts: Date.now() })
-    this.sessions.get(id)?.send(text)
+  /** Deliver a mid-flight steer. Returns false (and records nothing) if the
+   *  session is no longer accepting turns — the caller falls back to resume. */
+  steer(id: string, text: string): boolean {
+    const delivered = this.sessions.get(id)?.send(text) ?? false
+    if (delivered) this.push(id, { kind: 'steered', text, ts: Date.now() })
+    return delivered
   }
 
   /** Post-report feedback: resume the finished session with the user's
    *  verdict/correction. The agent responds in the timeline and may emit a
    *  REVISED mesh-report — which flows through finalize like any report. */
   comment(id: string, text: string): void {
-    const live = this.sessions.get(id)
-    if (live) {
-      // still running — feedback is just steering
-      this.steer(id, text)
-      return
-    }
+    // Only treat as live steering if the session ACTUALLY accepts the turn;
+    // a session whose queue has closed (post-result/error) must take the
+    // resume path, not silently swallow the feedback.
+    if (this.sessions.get(id) && this.steer(id, text)) return
 
     const invs = investigationsRepo(this.deps.db)
     const inv = invs.get(id)
@@ -280,10 +295,14 @@ export class Engine {
       .filter(Boolean)
       .join('\n')
 
-    // keep/rebuild prompts for the spawn (original entry may be gone after finalize)
+    // keep/rebuild prompts for the spawn (original entry may be gone after
+    // finalize). Fallback rebuilds a minimal cached prefix (runbook + accepted
+    // learnings); repos/map/ticket context is degraded on this path (tracked
+    // separately as a follow-up).
     const existing = this.prompts.get(id)
     this.prompts.set(id, {
-      system: existing?.system ?? buildSystemPrompt([], [], undefined, learningsRepo(this.deps.db).acceptedTexts()),
+      systemCached: existing?.systemCached ?? staticRunbook(),
+      systemDynamic: existing?.systemDynamic ?? buildDynamicContext([], [], undefined, learningsRepo(this.deps.db).acceptedTexts()),
       initial: feedbackPrompt,
     })
     this.retried.delete(id) // feedback turn gets its own wedge-retry budget
@@ -481,7 +500,9 @@ end tell`
       this.retried.add(id)
       this.wedged.delete(id)
       const row = this.sessionRows.get(id)
-      if (row) sessionsRepo(this.deps.db).end(row, 'wedge-retried')
+      // record what the wedged session spent (salvaged from the stream) — this
+      // is the most expensive failure mode; it should not read as $0.
+      if (row) sessionsRepo(this.deps.db).end(row, 'wedge-retried', this.sessions.get(id)?.usage)
       this.push(id, { kind: 'status', text: 'provider session hit an SDK glitch (duplicate tool_use ids) — restarting fresh', ts: Date.now() })
       this.spawnSession(id) // no resumeSessionId on purpose
       return
@@ -520,7 +541,15 @@ end tell`
       this.deps.emitState(id, 'report', 'report')
       this.push(id, { kind: 'status', text: 'agent responded — original report stands', ts: Date.now() })
     } else {
-      this.push(id, { kind: 'status', text: 'session ended without a structured report', ts: Date.now() })
+      // No report and none before: set a TERMINAL status so the UI stops
+      // spinning, and keep the session resumable via feedback (prompts kept
+      // below, native session id persisted). Previously this left the row
+      // stuck 'investigating' with no live session — an unrecoverable limbo.
+      invs.setStatus(id, 'failed', Date.now())
+      // keep the stage where it is (don't trip the auto-nav to the empty
+      // Report screen); the UI keys "ended, resumable" off the 'failed' status
+      this.deps.emitState(id, inv.stage, 'failed')
+      this.push(id, { kind: 'status', text: 'session ended without a report — send feedback to resume, or abandon', ts: Date.now() })
     }
     this.sessions.delete(id)
     this.transcripts.delete(id)
@@ -531,10 +560,16 @@ end tell`
   /** Section 7 feedback loop: every completed investigation becomes memory. */
   private saveToMemory(inv: Investigation, report: Report): void {
     const memory = memoryRepo(this.deps.db)
+    // Record WHICH ticket this investigated (ENG-1234) in ticketId — without
+    // it, re-investigating a ticket re-injects Mesh's OWN prior hypothesis as
+    // an independent "similar incident" (the echo chamber). The self-exclusion
+    // filters key on this.
+    const ticketId = inv.ticketRef?.match(/\b([A-Za-z]{2,6}-\d+)\b/)?.[1]?.toUpperCase()
     memory.upsert({
       id: `mesh:${inv.id}`,
       source: 'mesh',
       identifier: inv.id,
+      ticketId,
       title: inv.title,
       symptoms: report.evidence.map((e) => e.claim).join('; ') || inv.title,
       rootCause: report.hypothesis,

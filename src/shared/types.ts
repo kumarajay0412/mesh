@@ -5,7 +5,7 @@
 export type Stage = 'intake' | 'scope' | 'investigate' | 'report'
 export const STAGES: Stage[] = ['intake', 'scope', 'investigate', 'report']
 
-export type InvestigationStatus = 'open' | 'investigating' | 'report' | 'closed' | 'abandoned'
+export type InvestigationStatus = 'open' | 'investigating' | 'report' | 'closed' | 'abandoned' | 'failed'
 export type Confidence = 'suspected' | 'probable' | 'confirmed'
 export type SourceKind = 'linear' | 'slack' | 'sentry' | 'grafana' | 'manual'
 
@@ -128,6 +128,8 @@ export interface MemoryRecord {
   reportedAt?: number
   resolvedAt?: number
   updatedAt: number
+  /** cross-source sibling: the Slack thread for a Linear ticket, or vice versa */
+  linkedId?: string
 }
 
 export interface MemorySearchHit {
@@ -275,14 +277,32 @@ export interface SettingsState {
    *  auto/bypass are the user's explicit opt-out of that gate */
   permissionMode: MeshPermissionMode
   syncIntervalMin: number
+  /** first-run tour dismissed/completed — the Tutorial button reopens it anytime */
+  onboardingSeen?: boolean
   autoSync: boolean
   repoRoot: string
   /** GitHub org for repo sync; inferred from local remotes on first run */
   githubOrg?: string
+  /** "context to add later" — the user's own checklist on the Knowledge Map
+   *  panel; never injected into prompts */
+  contextBacklog?: string[]
 }
 
 export interface IntakeInput {
   title?: string
   ticketRef?: string
   pasted?: string
+}
+
+/** Everything Mesh has inferred so far — the transparency view behind the
+ *  Knowledge Map's "What Mesh knows" panel. */
+export interface ContextSummary {
+  memory: { total: number; bySource: Record<string, number>; embedded: number }
+  registry: { total: number; manual: number }
+  map: { nodes: number; edges: number; proposed: number }
+  learnings: { accepted: number; proposed: number }
+  /** the exact SYSTEM MAP block injected into every agent prompt */
+  mapPrompt: string
+  /** accepted learning lines, exactly as they ride in prompts */
+  learningTexts: string[]
 }

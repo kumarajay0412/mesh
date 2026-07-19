@@ -11,7 +11,7 @@ import { Button, Pill } from '../components/ui'
 /** The hero screen: live timeline + steering (left) · evidence rail (right). */
 export function InvestigationView() {
   const { activeInvestigationId: id, go } = useApp()
-  const { list, load, timelines, watch, unwatch, steer, interrupt, abandon, engineStates } = useInvestigations()
+  const { list, load, timelines, watch, unwatch, steer, interrupt, abandon, comment, engineStates } = useInvestigations()
 
   useEffect(() => {
     void load()
@@ -47,7 +47,13 @@ export function InvestigationView() {
     return inv?.stage ?? 'intake'
   }, [events, inv])
 
-  const done = events.some((e) => e.kind === 'done')
+  // Drive live/terminal state off the AUTHORITATIVE engine status, not a scan
+  // for a 'done' event — the latter latched forever, so a wedge-retry's fresh
+  // session ran unsteerable behind a premature "View report".
+  const status = (id ? engineStates[id]?.status : undefined) ?? inv?.status
+  const working = status === 'investigating'
+  const failed = status === 'failed' // ended with no report — resumable via feedback
+  const done = status === 'report' || status === 'abandoned' || status === 'closed'
 
   if (!id) return null
 
@@ -91,16 +97,33 @@ export function InvestigationView() {
             <div className="flex-1" />
             <span className="font-mono text-[10px] text-subtle">{events.length} events</span>
           </div>
-          <Timeline events={events} working={!done && inv?.status === 'investigating'} />
-          <SteeringInput
-            onSteer={(t) => void steer(id, t)}
-            onInterrupt={() => void interrupt(id)}
-            onAbandon={() => {
-              void abandon(id)
-              go('investigations')
-            }}
-            disabled={done}
-          />
+          <Timeline events={events} working={working} />
+          {failed ? (
+            // ended without a report — offer the resume path (comment() respawns
+            // the session with the user's steer) instead of only Abandon
+            <SteeringInput
+              onSteer={(t) => {
+                void comment(id, t)
+              }}
+              onInterrupt={() => void interrupt(id)}
+              onAbandon={() => {
+                void abandon(id)
+                go('investigations')
+              }}
+              placeholder="No report yet — tell the agent where to look, and it resumes…"
+              sendLabel="Resume"
+            />
+          ) : (
+            <SteeringInput
+              onSteer={(t) => void steer(id, t)}
+              onInterrupt={() => void interrupt(id)}
+              onAbandon={() => {
+                void abandon(id)
+                go('investigations')
+              }}
+              disabled={done}
+            />
+          )}
         </section>
         <EvidenceRail items={evidence} />
       </div>

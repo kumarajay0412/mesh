@@ -70,8 +70,9 @@ export function codexProvider(): Provider {
       return {
         sessionId: null, // exec mode: no resumable session id surfaced
         usage: null, // exec mode: no usage accounting surfaced
-        send() {
+        send(): boolean {
           emit({ kind: 'status', text: 'steering unavailable under Codex exec — restart with added context instead', ts: Date.now() })
+          return false // Codex exec mode cannot accept mid-flight turns
         },
         interrupt() {
           child?.kill('SIGTERM')

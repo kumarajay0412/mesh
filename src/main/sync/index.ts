@@ -7,6 +7,7 @@ import type { Database } from 'better-sqlite3'
 import type { SyncProgressEvent } from '../../shared/types'
 import { memoryRepo } from '../db/repos/memory'
 import { syncStateRepo } from '../db/repos/syncState'
+import { slackThreadsRepo } from '../db/repos/slackThreads'
 import type { SecretStore } from '../security/secrets'
 import { fetchLinearSince } from './linear'
 import { fetchSlackSince } from './slack'
@@ -33,9 +34,11 @@ export interface SyncDeps {
 const inflight = new Map<string, Promise<void>>()
 
 export function knownSources(deps: SyncDeps): string[] {
-  // slack.channel accepts a comma-separated list ("reporting-prod, incidents,
-  // postmortems") — each channel is its own source with its own cursor
-  const channels = (deps.secrets.get('slack.channel') ?? '#reporting')
+  // slack.channel is a comma-separated list ("reporting-prod, incidents") —
+  // each SELECTED channel is its own source with its own cursor. No channels
+  // chosen yet → no slack sources: a phantom default like "slack:reporting"
+  // would show a channel nobody picked. Connections is the connect prompt.
+  const channels = (deps.secrets.get('slack.channel') ?? '')
     .split(',')
     .map((c) => c.trim().replace(/^#/, ''))
     .filter(Boolean)
@@ -102,9 +105,19 @@ async function syncOne(deps: SyncDeps, runId: string, source: string): Promise<v
     try {
       const cursor = states.get(source).cursor
       emit('fetch', 0)
-      const nextCursor = await fetchSlackSince(token, channel.replace(/^#/, ''), cursor, async (threads) => {
-        ingested += await ingestPage(deps, { tickets: [], threads }, emit, ingested)
-      })
+      const threadTracker = slackThreadsRepo(deps.db)
+      const nextCursor = await fetchSlackSince(
+        token,
+        channel.replace(/^#/, ''),
+        cursor,
+        (ts, replyCount) => threadTracker.changed(ts, replyCount),
+        async (threads) => {
+          ingested += await ingestPage(deps, { tickets: [], threads }, emit, ingested)
+          // record only after a successful ingest, so the tracker never claims
+          // a thread is done that isn't actually in memory
+          for (const th of threads) threadTracker.record(th.ts, th.replyCount)
+        },
+      )
       if (nextCursor) states.setCursor(source, nextCursor) // after completion only
       states.finishRun(source, 'idle')
       emit('done', ingested, ingested)
@@ -145,7 +158,9 @@ async function ingestPage(
   const incidents = linked.filter((incident) => {
     const id = incident.ticket ? `${incident.ticket.source}:${incident.ticket.ticketId}` : `slack:${incident.thread!.ts}`
     const seenAt = memory.updatedAtOf(id)
-    const srcAt = incident.ticket?.updatedAt ?? incident.thread?.createdAt ?? 0
+    // Slack: use reply ACTIVITY, not the immutable head ts, so a thread that
+    // gained the diagnosis in later replies is correctly seen as changed.
+    const srcAt = incident.ticket?.updatedAt ?? incident.thread?.latestActivityAt ?? 0
     const unchanged = seenAt !== null && seenAt === srcAt
     // Unchanged rows still get derived-label refreshes (project tags etc.) —
     // metadata only, no distill, no updated_at bump.
@@ -160,13 +175,13 @@ async function ingestPage(
 
   let gatedShort = 0
   const distillOne = async (incident: LinkedIncident) => {
+    if (!deps.llm) return heuristicDistill(incident)
+    // Gate on TOTAL CONTENT, not comment count: a rich 0-comment ticket
+    // description deserves distillation; a 3-reply "thanks!" thread does not.
+    // Both conditions must hold to skip, so a long single-message incident
+    // (a detailed bug report, a full RCA paste) still gets the LLM.
     const commentCount = (incident.ticket?.comments.length ?? 0) + (incident.thread?.replies.length ?? 0)
-    // ≤2 comments = no investigation narrative; heuristics extract the same
-    // fields without a multi-second model call.
-    if (!deps.llm || commentCount <= 2) return heuristicDistill(incident)
-    // Length gate: under ~800 chars there is nothing to "distill" — the whole
-    // thread fits the symptoms field verbatim. Measured 35% of the corpus.
-    if (incidentText(incident).length < 800) {
+    if (commentCount <= 2 && incidentText(incident).length < 800) {
       gatedShort++
       return heuristicDistill(incident)
     }
@@ -190,6 +205,9 @@ async function ingestPage(
     for (const r of results) {
       if (!r) continue
       memory.upsert(toMemoryRecord(r.incident, r.distilled))
+      // Link this incident to its counterpart from the OTHER source (walked by
+      // a separate sync pass), so one outage isn't two divergent rows.
+      crossLink(memory, r.incident)
       done++
     }
     emit('upsert', alreadyDone + done, total)
@@ -201,6 +219,39 @@ async function ingestPage(
 
 function incidentKey(i: LinkedIncident): string {
   return i.ticket ? `${i.ticket.source}:${i.ticket.identifier ?? i.ticket.ticketId}` : `slack:${i.thread?.ts}`
+}
+
+/** Cross-source linking against the DB (not the in-flight batch): the ticket
+ *  and the Slack thread about the same outage are walked by separate sync
+ *  passes, so we link whichever is ingested second to its already-stored
+ *  counterpart, by the two high-precision signals (identifier, permalink). */
+function crossLink(memory: ReturnType<typeof memoryRepo>, incident: LinkedIncident): void {
+  if (incident.ticket) {
+    const id = `${incident.ticket.source}:${incident.ticket.ticketId}`
+    if (incident.ticket.identifier) {
+      for (const slackId of memory.slackIdsMentioning(incident.ticket.identifier)) memory.linkTo(id, slackId)
+    }
+    for (const url of incident.ticket.urls) {
+      const slackId = slackIdFromPermalink(url)
+      if (slackId && memory.exists(slackId)) memory.linkTo(id, slackId)
+    }
+  }
+  if (incident.thread) {
+    const id = `slack:${incident.thread.ts}`
+    const text = [incident.thread.text, ...incident.thread.replies.map((r) => r.body)].join(' ')
+    for (const m of text.matchAll(/\b([A-Z]{2,6}-\d+)\b/g)) {
+      const lin = memory.byIdentifier(m[1])
+      if (lin) memory.linkTo(id, lin.id)
+    }
+  }
+}
+
+/** Slack permalink → memory row id: .../archives/<chan>/p<digits> → slack:<ts>. */
+function slackIdFromPermalink(url: string): string | null {
+  const m = url.match(/\/archives\/[A-Z0-9]+\/p(\d+)/i)
+  if (!m || m[1].length < 7) return null
+  const d = m[1]
+  return `slack:${d.slice(0, -6)}.${d.slice(-6)}`
 }
 
 function toMemoryRecord(
@@ -231,7 +282,9 @@ function toMemoryRecord(
     priority: t?.priority,
     reportedAt: t?.createdAt ?? th?.createdAt,
     resolvedAt: t?.completedAt,
-    updatedAt: t?.updatedAt ?? th?.createdAt ?? Date.now(),
+    // Slack rows carry reply-activity time so a re-distill after new replies
+    // bumps updated_at and skip-unchanged sees the change.
+    updatedAt: t?.updatedAt ?? th?.latestActivityAt ?? Date.now(),
     rawCommentsJson: rawComments,
   }
 }

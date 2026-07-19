@@ -22,6 +22,7 @@ export interface MemoryRow {
   resolved_at: number | null
   updated_at: number
   embedded: number
+  linked_id: string | null
 }
 
 export function rowToRecord(r: MemoryRow): MemoryRecord {
@@ -43,6 +44,7 @@ export function rowToRecord(r: MemoryRow): MemoryRecord {
     reportedAt: r.reported_at ?? undefined,
     resolvedAt: r.resolved_at ?? undefined,
     updatedAt: r.updated_at,
+    linkedId: r.linked_id ?? undefined,
   }
 }
 
@@ -124,6 +126,28 @@ export function memoryRepo(db: Database) {
       const r = db.prepare('SELECT rowid, * FROM memory WHERE id = ?').get(id) as MemoryRow | undefined
       if (!r) return null
       return { ...rowToRecord(r), rawCommentsJson: r.raw_comments_json ?? undefined }
+    },
+
+    /** Does a row with this id exist? (cheap existence check for cross-linking) */
+    exists(id: string): boolean {
+      return db.prepare('SELECT 1 FROM memory WHERE id = ?').get(id) !== undefined
+    },
+
+    /** Cross-link two memory rows as the same incident, both directions. */
+    linkTo(a: string, b: string): void {
+      const stmt = db.prepare('UPDATE memory SET linked_id = ? WHERE id = ?')
+      stmt.run(b, a)
+      stmt.run(a, b)
+    },
+
+    /** Slack rows whose text/thread mentions a ticket identifier (ENG-1234). */
+    slackIdsMentioning(identifier: string): string[] {
+      const like = `%${identifier.toUpperCase()}%`
+      return (
+        db
+          .prepare(`SELECT id FROM memory WHERE source = 'slack' AND (upper(title) LIKE ? OR upper(coalesce(raw_comments_json,'')) LIKE ?)`)
+          .all(like, like) as { id: string }[]
+      ).map((r) => r.id)
     },
 
     bySignature(signature: string, limit = 5): MemoryRow[] {

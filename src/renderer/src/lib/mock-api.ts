@@ -704,6 +704,21 @@ export class MockApi implements MeshApi {
     if (accept) e.status = 'accepted'
     else this.mapEdges = this.mapEdges.filter((x) => x.id !== id)
   }
+  async getContextSummary() {
+    return {
+      memory: { total: this.memory.length, bySource: { linear: 3, slack: 2, mesh: 1 }, embedded: this.memory.length - 1 },
+      registry: { total: this.services.length, manual: 1 },
+      map: {
+        nodes: this.mapNodes.length,
+        edges: this.mapEdges.filter((e) => e.status === 'accepted').length,
+        proposed: this.mapEdges.filter((e) => e.status === 'proposed').length,
+      },
+      learnings: { accepted: this.learnings.filter((l) => l.status === 'accepted').length, proposed: this.learnings.filter((l) => l.status === 'proposed').length },
+      mapPrompt: 'SYSTEM MAP (accepted topology — trust it):\n- acme-showcase → dashboard-service (graphql)\n- acme-showcase → speech-orchestrator (ws)\n- speech-orchestrator → cmd-batch-asr (http)',
+      learningTexts: this.learnings.filter((l) => l.status === 'accepted').map((l) => l.text),
+    }
+  }
+
   async seedMapFromText(text: string) {
     if (!text.trim()) return { ok: false as const, message: 'paste a description first' }
     // simulate an extraction: two nodes + one edge appear on the map

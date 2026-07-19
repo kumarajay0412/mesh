@@ -111,8 +111,18 @@ query in evidence); never sketch an estimated curve. Keep metrics to at most
 services with a bullet saying why they are cleared prevent re-litigating them
 next incident.`
 
-export function buildSystemPrompt(services: ServiceEntry[], similar: MemorySearchHit[], timeWindow?: string, learnedContext: string[] = []): string {
-  const parts = [RUNBOOK]
+/** The invariant runbook — byte-identical every session. This is the cacheable
+ *  static prefix (SYSTEM_PROMPT_DYNAMIC_BOUNDARY): after the first session it is
+ *  read from cache at ~0.1x instead of re-billed. Keep per-investigation content
+ *  OUT of here. */
+export function staticRunbook(): string {
+  return RUNBOOK
+}
+
+/** Per-investigation context (learnings · candidate registry · similar
+ *  incidents · time window) — the DYNAMIC suffix, rebuilt each session. */
+export function buildDynamicContext(services: ServiceEntry[], similar: MemorySearchHit[], timeWindow?: string, learnedContext: string[] = []): string {
+  const parts: string[] = []
 
   if (learnedContext.length > 0) {
     parts.push(
@@ -137,11 +147,15 @@ export function buildSystemPrompt(services: ServiceEntry[], similar: MemorySearc
   if (similar.length > 0) {
     const clip = (s: string | undefined, n: number) => (s && s.length > n ? `${s.slice(0, n)}…` : (s ?? 'unknown'))
     parts.push(
-      '\nSIMILAR PAST INCIDENTS (from memory — strong priors, verify before trusting; full record one call away: mcp__memory__get_incident <id>):',
+      '\nSIMILAR PAST INCIDENTS (from memory — priors, verify before trusting; full record one call away: mcp__memory__get_incident <id>):',
       ...similar.slice(0, 3).map((h) => {
         const r = h.record
         const steps = r.resolutionSteps?.slice(0, 3).join(' → ')
-        return `- [${r.identifier ?? r.id}] ${r.title}\n  symptoms: ${clip(r.symptoms, 200)}\n  root cause: ${clip(r.rootCause, 250)}\n  fix: ${clip(r.resolution, 250)}${steps ? `\n  steps that worked: ${clip(steps, 250)}` : ''}`
+        // Mesh's own past investigations are UNVERIFIED — mark them so the
+        // agent treats them as leads, not human-confirmed resolutions.
+        const mesh = r.source === 'mesh'
+        const tag = mesh ? ' (prior Mesh investigation — UNVERIFIED hypothesis)' : ''
+        return `- [${r.identifier ?? r.id}] ${r.title}${tag}\n  symptoms: ${clip(r.symptoms, 200)}\n  ${mesh ? 'hypothesized cause' : 'root cause'}: ${clip(r.rootCause, 250)}\n  ${mesh ? 'suggested fix' : 'fix'}: ${clip(r.resolution, 250)}${steps ? `\n  steps that worked: ${clip(steps, 250)}` : ''}`
       }),
     )
   }
@@ -149,4 +163,11 @@ export function buildSystemPrompt(services: ServiceEntry[], similar: MemorySearc
   if (timeWindow) parts.push(`\nTIME WINDOW: ${timeWindow}`)
 
   return parts.join('\n')
+}
+
+/** Back-compat: the old single-string prompt (runbook + context), for the
+ *  feedback-rebuild path where caching isn't the concern. */
+export function buildSystemPrompt(services: ServiceEntry[], similar: MemorySearchHit[], timeWindow?: string, learnedContext: string[] = []): string {
+  const ctx = buildDynamicContext(services, similar, timeWindow, learnedContext)
+  return ctx ? `${RUNBOOK}\n${ctx}` : RUNBOOK
 }

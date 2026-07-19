@@ -28,7 +28,10 @@ export interface RawThread {
   permalink?: string
   text: string // opening message
   replies: RawComment[]
-  createdAt: number
+  createdAt: number // head message time — NEVER changes as replies arrive
+  replyCount: number // from the history payload; the change signal
+  /** max(head, latest reply) — the real freshness signal for skip-unchanged */
+  latestActivityAt: number
 }
 
 export interface LinkedIncident {

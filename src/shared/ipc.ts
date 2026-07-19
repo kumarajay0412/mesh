@@ -2,6 +2,7 @@
 // Types only; no runtime code (the renderer bundle must not pull in Electron).
 import type {
   AgentEvent,
+  ContextSummary,
   ApprovalOutcome,
   ConnectionInfo,
   GrafanaInstance,
@@ -68,6 +69,9 @@ export interface Invokes {
     args: { text: string }
     result: { ok: true; nodes: number; edges: number } | { ok: false; message: string }
   }
+  /** The "What Mesh knows" transparency panel: totals for every inferred
+   *  store + the exact map/learning text that rides in prompts. */
+  'context:summary': { args: void; result: ContextSummary }
 
   'learnings:list': { args: { status?: Learning['status'] }; result: Learning[] }
   'learnings:decide': { args: { id: number; accept: boolean }; result: void }

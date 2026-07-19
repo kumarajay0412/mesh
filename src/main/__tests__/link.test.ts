@@ -27,6 +27,8 @@ function thread(over: Partial<RawThread>): RawThread {
     text: 'payments checkout is throwing 5xx timeouts',
     replies: [],
     createdAt: t0 + 5 * 60_000,
+    replyCount: 0,
+    latestActivityAt: t0 + 5 * 60_000,
     ...over,
   }
 }

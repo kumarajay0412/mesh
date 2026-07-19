@@ -216,6 +216,32 @@ export function registerIpc(deps: RegisterDeps): void {
     return { ok: true as const, nodes: extraction.nodes.length, edges: extraction.edges.length }
   })
 
+  // "What Mesh knows" — totals for every inferred store, plus the exact
+  // text that rides in prompts. Read-only aggregation; nothing cached.
+  handle('context:summary', () => {
+    const bySourceRows = db.prepare('SELECT source, COUNT(*) c FROM memory GROUP BY source').all() as { source: string; c: number }[]
+    const embedded = (db.prepare('SELECT COUNT(*) c FROM memory WHERE embedded = 1').get() as { c: number }).c
+    const manual = (db.prepare(`SELECT COUNT(*) c FROM services WHERE source = 'manual'`).get() as { c: number }).c
+    const edges = map.edges()
+    const accepted = learnings.list('accepted')
+    return {
+      memory: {
+        total: bySourceRows.reduce((a, r) => a + r.c, 0),
+        bySource: Object.fromEntries(bySourceRows.map((r) => [r.source, r.c])),
+        embedded,
+      },
+      registry: { total: services.list().length, manual },
+      map: {
+        nodes: map.nodes().length,
+        edges: edges.filter((e) => e.status === 'accepted').length,
+        proposed: edges.filter((e) => e.status === 'proposed').length,
+      },
+      learnings: { accepted: accepted.length, proposed: learnings.list('proposed').length },
+      mapPrompt: map.promptText(),
+      learningTexts: accepted.map((l) => l.text),
+    }
+  })
+
   // learnings — the user-gated context loop
   const learnings = learningsRepo(db)
   handle('learnings:list', ({ status }) => learnings.list(status))

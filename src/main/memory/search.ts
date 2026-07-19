@@ -8,7 +8,7 @@
 import type { Database } from 'better-sqlite3'
 import type { MemorySearchResult } from '../../shared/types'
 import { memoryRepo, rowToRecord } from '../db/repos/memory'
-import { extractSignature } from './signature'
+import { extractSignature, isSpecificSignature } from './signature'
 import { fuse, toMatchExpr, type RankedList } from './rank'
 import type { Embeddings } from './embeddings'
 
@@ -25,9 +25,11 @@ export async function searchMemory(
   const q = query.trim()
   if (!q) return { hits: [], semantic: false }
 
-  // 1 · signature
+  // 1 · signature — only a FRAME-QUALIFIED signature (Error:frame) is specific
+  // enough to pin above ranking; a bare type ('TypeError') collides across
+  // unrelated incidents, so it contributes via lexical instead.
   const sig = extractSignature(q)
-  const sigRows = sig ? memory.bySignature(sig, 5) : []
+  const sigRows = isSpecificSignature(sig) ? memory.bySignature(sig!, 5) : []
 
   // 2 · lexical
   const matchExpr = toMatchExpr(q)
@@ -57,10 +59,17 @@ export async function searchMemory(
   // hydrate records in fused order
   const rows = memory.byRowids(fused.map((f) => f.rowid))
   const byRowid = new Map(rows.map((r) => [r.rowid, r]))
+  // Collapse cross-source siblings: a Linear ticket and its Slack thread about
+  // the same outage are one incident — keep the higher-ranked, drop the other.
+  const emitted = new Set<string>()
   const hits = fused
     .map((f) => {
       const row = byRowid.get(f.rowid)
-      return row ? { record: rowToRecord(row), score: f.score, matched: f.matched } : null
+      if (!row) return null
+      if (emitted.has(row.id)) return null // its sibling already surfaced
+      emitted.add(row.id)
+      if (row.linked_id) emitted.add(row.linked_id)
+      return { record: rowToRecord(row), score: f.score, matched: f.matched }
     })
     .filter((h): h is NonNullable<typeof h> => h !== null)
 

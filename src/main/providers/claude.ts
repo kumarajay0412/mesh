@@ -5,7 +5,7 @@
 //
 // SDK message shapes are treated as a BOUNDARY: mapped defensively through
 // runtime guards so minor SDK drift degrades to a status line, not a crash.
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -40,8 +40,13 @@ class UserTurnQueue {
   private waiting: ((v: IteratorResult<{ type: 'user'; message: { role: 'user'; content: string } }>) => void) | null = null
   private closed = false
 
-  push(text: string): void {
-    if (this.closed) return
+  get isClosed(): boolean {
+    return this.closed
+  }
+
+  /** Returns false if the queue is closed — the turn was NOT delivered. */
+  push(text: string): boolean {
+    if (this.closed) return false
     const item = { type: 'user' as const, message: { role: 'user' as const, content: text } }
     if (this.waiting) {
       const w = this.waiting
@@ -50,6 +55,7 @@ class UserTurnQueue {
     } else {
       this.buffer.push(text)
     }
+    return true
   }
 
   close(): void {
@@ -88,17 +94,27 @@ export function claudeProvider(): Provider {
       const abort = new AbortController()
       let sessionId: string | null = opts.resumeSessionId ?? null
       let usage: SessionUsage | null = null
+      // running total folded from each assistant message's usage — the salvage
+      // value when a session dies before its terminal 'result'
+      const running: SessionUsage = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, costUsd: null, numTurns: null }
       const mode = opts.permissionMode ?? 'default'
 
       const emit = (e: AgentEvent) => opts.onEvent(e)
 
       const finished = (async () => {
         try {
+          // Split prompt → [cached, BOUNDARY, dynamic] so the invariant prefix
+          // is cross-session prompt-cached; plain string passes through.
+          const systemPrompt =
+            typeof opts.systemPrompt === 'string'
+              ? opts.systemPrompt
+              : [opts.systemPrompt.cached, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, opts.systemPrompt.dynamic]
+
           const q = query({
             prompt: turns as AsyncIterable<never>, // streaming-input mode
             options: {
               cwd: opts.cwd,
-              systemPrompt: opts.systemPrompt,
+              systemPrompt,
               pathToClaudeCodeExecutable: resolveClaudeCli(),
               model: opts.model,
               effort: opts.effort,
@@ -172,13 +188,17 @@ export function claudeProvider(): Provider {
             const m = raw as Record<string, unknown>
             const newSession = mapMessage(m, emit)
             if (newSession) sessionId = newSession
+            // Accumulate per-message usage as the stream flows, so a session
+            // that dies before its 'result' (e.g. the duplicate-tool_use wedge
+            // after 50 turns) still records what it spent, not NULL.
+            accumulateUsage(m, running)
             // Streaming-input mode never ends on its own — the queue would
             // wait for more user turns forever after the agentic turn
             // completes. 'result' = the turn is done: close the queue so the
             // generator drains and the session finalizes. (Steering is a
             // MID-turn feature; post-result the investigation is over.)
             if (m.type === 'result') {
-              usage = extractUsage(m)
+              usage = extractUsage(m) ?? (running.outputTokens > 0 ? running : null)
               if (usage) {
                 emit({
                   kind: 'status',
@@ -196,6 +216,11 @@ export function claudeProvider(): Provider {
             l.error('session error:', (e as Error).message)
             emit({ kind: 'error', text: `provider error: ${(e as Error).message}`, ts: Date.now() })
           }
+          // Close the queue on error too — otherwise a later send() would feed
+          // a dead generator and be silently lost (it now returns false).
+          turns.close()
+          // On a wedged/errored session, salvage the streamed usage.
+          if (!usage && running.outputTokens > 0) usage = running
           emit({ kind: 'done', ts: Date.now() })
         }
       })()
@@ -207,8 +232,8 @@ export function claudeProvider(): Provider {
         get usage() {
           return usage
         },
-        send(text: string) {
-          turns.push(text)
+        send(text: string): boolean {
+          return turns.push(text) // false if the session is no longer accepting turns
         },
         interrupt() {
           abort.abort()
@@ -302,6 +327,20 @@ function extractUsage(m: Record<string, unknown>): SessionUsage | null {
     costUsd: typeof m.total_cost_usd === 'number' ? m.total_cost_usd : null,
     numTurns: typeof m.num_turns === 'number' ? m.num_turns : null,
   }
+}
+
+/** Fold an assistant message's usage into the running total. The API attaches
+ *  usage to each assistant message; summing these salvages the spend of a
+ *  session that never reaches its terminal 'result'. */
+function accumulateUsage(m: Record<string, unknown>, running: SessionUsage): void {
+  if (m.type !== 'assistant') return
+  const u = (m.message as { usage?: Record<string, number> } | undefined)?.usage
+  if (!u) return
+  running.inputTokens += u.input_tokens ?? 0
+  running.cacheWriteTokens += u.cache_creation_input_tokens ?? 0
+  running.cacheReadTokens += u.cache_read_input_tokens ?? 0
+  running.outputTokens += u.output_tokens ?? 0
+  running.numTurns = (running.numTurns ?? 0) + 1
 }
 
 function fmtTok(n: number): string {

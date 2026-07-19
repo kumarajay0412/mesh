@@ -27,6 +27,12 @@ export class Embeddings {
   private nextId = 1
   private status: ModelStatus = { state: 'idle' }
   private draining = false
+  // Supervised respawn: a native ORT crash used to permanently kill semantic
+  // search until app restart. We restart with capped backoff, and a circuit
+  // breaker (too many crashes in a short window) so we don't hot-loop.
+  private intentionalStop = false
+  private crashTimes: number[] = []
+  private respawnTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private db: Database,
@@ -70,11 +76,27 @@ export class Embeddings {
       for (const p of this.pending.values()) p.reject(new Error('worker exited'))
       this.pending.clear()
       this.worker = null
-      if (this.status.state !== 'error') this.setStatus({ state: 'error', message: 'embedding worker exited' })
+      if (this.intentionalStop) return // stop() — don't resurrect
+
+      // Circuit breaker: >3 crashes in 5 min → give up (a persistent native
+      // fault, not a transient one). Otherwise respawn with capped backoff;
+      // the 'ready' handler above then re-drains the pending queue automatically.
+      const now = Date.now()
+      this.crashTimes = this.crashTimes.filter((t) => now - t < 5 * 60_000)
+      this.crashTimes.push(now)
+      if (this.crashTimes.length > 3) {
+        this.setStatus({ state: 'error', message: 'embedding worker crashed repeatedly — semantic search disabled until restart' })
+        return
+      }
+      const backoff = Math.min(30_000, 1000 * 2 ** (this.crashTimes.length - 1))
+      this.setStatus({ state: 'idle', message: `embedding worker crashed — restarting in ${Math.round(backoff / 1000)}s` })
+      this.respawnTimer = setTimeout(() => this.start(), backoff)
     })
   }
 
   stop(): void {
+    this.intentionalStop = true
+    if (this.respawnTimer) clearTimeout(this.respawnTimer)
     this.worker?.kill()
     this.worker = null
   }
@@ -117,7 +139,7 @@ export class Embeddings {
       for (;;) {
         const rows = memory.pendingEmbedding(32)
         if (rows.length === 0) break
-        const vectors = await this.embed(rows.map((r) => r.symptoms || r.title))
+        const vectors = await this.embed(rows.map((r) => (r.symptoms || r.title).slice(0, 2000)))
         // vec0 virtual tables don't implement conflict resolution — no
         // INSERT OR REPLACE / upsert. Re-embedded rows (sync re-upserts set
         // embedded=0) must be deleted before re-insert.
@@ -139,7 +161,7 @@ export class Embeddings {
       for (;;) {
         const rows = learnings.pendingEmbedding(32)
         if (rows.length === 0) break
-        const vectors = await this.embed(rows.map((r) => r.text))
+        const vectors = await this.embed(rows.map((r) => r.text.slice(0, 2000)))
         const del = this.db.prepare('DELETE FROM learnings_vec WHERE learning_id = ?')
         const insert = this.db.prepare('INSERT INTO learnings_vec (learning_id, embedding) VALUES (?, ?)')
         const tx = this.db.transaction(() => {

@@ -4,6 +4,7 @@
 // no provider is configured we fall back to an honest heuristic (marked so).
 import { z } from 'zod'
 import type { DistilledIncident, LinkedIncident } from './types'
+import { extractSignature } from '../memory/signature'
 
 export type LlmOneShot = (system: string, prompt: string) => Promise<string>
 
@@ -44,29 +45,37 @@ export async function distillIncident(incident: LinkedIncident, llm: LlmOneShot)
 export function heuristicDistill(incident: LinkedIncident): DistilledIncident {
   const title = incident.ticket?.title ?? incident.thread?.text.slice(0, 120) ?? ''
   const description = incident.ticket?.description ?? incident.thread?.text ?? ''
-  const comments = [...(incident.ticket?.comments ?? []), ...(incident.thread?.replies ?? [])].sort(
-    (a, b) => a.createdAt - b.createdAt,
-  )
+  const comments = [...(incident.ticket?.comments ?? []), ...(incident.thread?.replies ?? [])].sort((a, b) => a.createdAt - b.createdAt)
+  const allText = [description, ...comments.map((c) => c.body)].join('\n')
   const last = comments[comments.length - 1]?.body ?? ''
   return {
     symptoms: `${title}. ${description}`.slice(0, 600).trim(),
-    resolution: last ? last.slice(0, 400) : undefined,
-    investigationSummary: comments.length ? `${comments.length} comments; undistilled (no LLM available at ingest)` : undefined,
+    // Even without an LLM, a stated cause is often right there ("root cause: …",
+    // "turned out to be …") — extract it rather than omitting rootCause entirely.
+    rootCause: extractCauseHint(allText),
+    // A trailing "thanks!" is an ack, not a resolution — don't store it as one.
+    resolution: last && !isAck(last) ? last.slice(0, 400) : undefined,
     resolutionSteps: [],
-    errorSignature: findSignature(`${description}\n${comments.map((c) => c.body).join('\n')}`),
+    errorSignature: findSignature(allText),
   }
 }
 
+/** Pull a stated cause out of free text (heuristic, no LLM). */
+function extractCauseHint(text: string): string | undefined {
+  const m = text.match(/\b(?:root cause|caused by|turned out (?:to be|that)|due to|because|the (?:issue|problem|bug) was|it was)\b[:\s]+([^\n.]{6,200})/i)
+  return m ? m[1].trim() : undefined
+}
+
+/** Is this comment just an acknowledgement, not a diagnosis/fix? */
+function isAck(text: string): boolean {
+  return /^\s*(?:thanks?|thank you|ty|great|awesome|perfect|ok(?:ay)?|resolved|fixed|done|👍|🙏|✅)[\s!.]*$/i.test(text.trim().slice(0, 40))
+}
+
 /** Pull an exceptionType:frame fingerprint out of free text when one exists. */
+// Ingest and query MUST canonicalize identically or the exact-match stage
+// never fires — delegate to the one shared extractor.
 export function findSignature(text: string): string | undefined {
-  const exc = text.match(/\b([A-Z][A-Za-z0-9]*(?:Error|Exception|Panic|Fault))\b(?:[:\s]+([^\n]{0,80}))?/)
-  if (exc) {
-    const frame = text.match(/\bat\s+([\w$.<>]+)\s*\(([^)]+)\)/) ?? text.match(/([\w/.-]+\.(?:ts|js|py|go|rb|java)):(\d+)/)
-    return frame ? `${exc[1]}:${frame[1]}` : exc[1]
-  }
-  const oom = text.match(/\bOOMKilled\b|\bout of memory\b/i)
-  if (oom) return 'OOMKilled'
-  return undefined
+  return extractSignature(text) ?? undefined
 }
 
 export function incidentText(incident: LinkedIncident): string {

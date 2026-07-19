@@ -12,6 +12,7 @@ const STATUS_TONE: Record<InvestigationStatus, 'neutral' | 'gold' | 'info' | 'ok
   report: 'info',
   closed: 'ok',
   abandoned: 'danger',
+  failed: 'danger',
 }
 
 const STATUS_LABEL: Record<InvestigationStatus, string> = {
@@ -20,6 +21,7 @@ const STATUS_LABEL: Record<InvestigationStatus, string> = {
   report: 'Report ready',
   closed: 'Closed',
   abandoned: 'Abandoned',
+  failed: 'No report',
 }
 
 type Filter = 'all' | 'open' | 'closed'
