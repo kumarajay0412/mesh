@@ -68,6 +68,7 @@ export interface MeshApi {
   setSecret(id: SourceId, fields: Record<string, string>): Promise<{ ok: boolean; message?: string }>
   grafanaInstances(): Promise<GrafanaInstance[]>
   removeGrafanaInstance(name: string): Promise<void>
+  listSlackChannels(token: string): Promise<{ ok: true; channels: { id: string; name: string; isMember: boolean }[] } | { ok: false; message: string }>
 
   // learned context (user-gated)
   listLearnings(status?: Learning['status']): Promise<Learning[]>
@@ -78,6 +79,7 @@ export interface MeshApi {
   saveMapNode(node: MapNode): Promise<void>
   addMapEdge(from: string, to: string, label: string | undefined, kind: MapEdge['kind']): Promise<void>
   decideMapEdge(id: number, accept: boolean): Promise<void>
+  seedMapFromText(text: string): Promise<{ ok: true; nodes: number; edges: number } | { ok: false; message: string }>
 
   // approvals
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void

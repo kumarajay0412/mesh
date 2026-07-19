@@ -56,6 +56,18 @@ export interface Invokes {
   'secrets:set': { args: { id: SourceId; fields: Record<string, string> }; result: { ok: boolean; message?: string } }
   'grafana:instances': { args: void; result: GrafanaInstance[] }
   'grafana:removeInstance': { args: { name: string }; result: void }
+  /** Live channel picker for the connect wizard — token is NOT yet saved when
+   *  this is called (the user is still filling the form). */
+  'slack:listChannels': {
+    args: { token: string }
+    result: { ok: true; channels: { id: string; name: string; isMember: boolean }[] } | { ok: false; message: string }
+  }
+  /** Universal map seeding: plain-language architecture description → LLM
+   *  extraction → nodes+edges inserted as regular (editable) map rows. */
+  'map:seedFromText': {
+    args: { text: string }
+    result: { ok: true; nodes: number; edges: number } | { ok: false; message: string }
+  }
 
   'learnings:list': { args: { status?: Learning['status'] }; result: Learning[] }
   'learnings:decide': { args: { id: number; accept: boolean }; result: void }

@@ -243,7 +243,7 @@ const MEMORY: MemoryRecord[] = [
     source: 'linear',
     ticketId: 'lin_abc042',
     identifier: 'ENG-1042',
-    slackUrl: 'https://adalat.slack.com/archives/C0REPORT/p1699',
+    slackUrl: 'https://acme.slack.com/archives/C0REPORT/p1699',
     title: 'payments-api OOMKilled under settlement batch load',
     symptoms: 'payments-api pods OOMKilled during nightly settlement batch; checkout 500s; restarts every ~8m',
     rootCause: 'batch size regression in 9c2210b blew the heap — settle worker loaded full ledger into memory',
@@ -267,7 +267,7 @@ const MEMORY: MemoryRecord[] = [
   {
     id: 'mem-2',
     source: 'slack',
-    slackUrl: 'https://adalat.slack.com/archives/C0REPORT/p1702',
+    slackUrl: 'https://acme.slack.com/archives/C0REPORT/p1702',
     title: 'Search p95 spikes when reindexer runs',
     symptoms: 'search latency doubles 02:00–02:20 daily; correlates with reindex cron; no errors, just slow',
     rootCause: 'reindexer saturated OpenSearch bulk queue; search threads starved',
@@ -346,7 +346,7 @@ const SERVICES: ServiceEntry[] = [
 ]
 
 const CONNECTIONS: ConnectionInfo[] = [
-  { id: 'grafana', name: 'Grafana', status: 'connected', detail: 'grafana.adalat.internal · 12 services', requiredFirst: true },
+  { id: 'grafana', name: 'Grafana', status: 'connected', detail: 'grafana.acme.internal · 12 services', requiredFirst: true },
   { id: 'linear', name: 'Linear', status: 'connected', detail: 'ENG · 1,204 issues' },
   { id: 'slack', name: 'Slack', status: 'connected', detail: '#reporting · synced 4m ago' },
   { id: 'sentry', name: 'Sentry', status: 'connected', detail: 'payments, auth, search' },
@@ -606,15 +606,28 @@ export class MockApi implements MeshApi {
 
   async grafanaInstances() {
     return [
-      { name: 'prod', url: 'https://grafana.adalat.internal', hasToken: true },
-      { name: 'azure', url: 'https://grafana-azure.adalat.internal', hasToken: true },
+      { name: 'prod', url: 'https://grafana.acme.internal', hasToken: true },
+      { name: 'azure', url: 'https://grafana-azure.acme.internal', hasToken: true },
     ]
   }
   async removeGrafanaInstance(_name: string) {}
 
+  async listSlackChannels(token: string) {
+    if (!token.trim()) return { ok: false as const, message: 'no token provided' }
+    return {
+      ok: true as const,
+      channels: [
+        { id: 'C001', name: 'reporting-prod', isMember: true },
+        { id: 'C002', name: 'incidents', isMember: true },
+        { id: 'C003', name: 'postmortems', isMember: false },
+        { id: 'C004', name: 'random', isMember: true },
+      ],
+    }
+  }
+
   private learnings = [
     { id: 1, investigationId: 'INV-050', text: 'Search latency issues: check the OpenSearch slowlog via {app="opensearch"} |= "slowlog" before anything else', status: 'proposed' as const, createdAt: now - 60 * min },
-    { id: 2, investigationId: 'INV-049', text: 'OOM investigations: memory limits live in adalat-charts, not the service repos', status: 'accepted' as const, createdAt: now - 26 * 60 * min },
+    { id: 2, investigationId: 'INV-049', text: 'OOM investigations: memory limits live in acme-charts, not the service repos', status: 'accepted' as const, createdAt: now - 26 * 60 * min },
   ]
   async listLearnings(status?: 'proposed' | 'accepted' | 'rejected') {
     return status ? this.learnings.filter((l) => l.status === status) : [...this.learnings]
@@ -636,8 +649,8 @@ export class MockApi implements MeshApi {
 
   /* system knowledge map — same seed as the real app */
   private mapNodes: import('@shared/types').MapNode[] = [
-    { id: 'adalat-showcase', label: 'Showcase (frontend)', kind: 'frontend', repo: 'adalat-showcase', grafana: 'prod' },
-    { id: 'adalat-party', label: 'PartyKit (docs realtime)', kind: 'edge', repo: 'adalat-party', grafana: 'prod' },
+    { id: 'acme-showcase', label: 'Showcase (frontend)', kind: 'frontend', repo: 'acme-showcase', grafana: 'prod' },
+    { id: 'acme-party', label: 'PartyKit (docs realtime)', kind: 'edge', repo: 'acme-party', grafana: 'prod' },
     { id: 'cryptic', label: 'Cryptic', kind: 'backend', repo: 'cryptic', grafana: 'prod' },
     { id: 'dashboard-service', label: 'Dashboard Service', kind: 'backend', repo: 'dashboard-service', grafana: 'prod', notes: 'the core backend' },
     { id: 'caseflow-service', label: 'Caseflow Service', kind: 'backend', repo: 'caseflow-service', grafana: 'prod' },
@@ -650,18 +663,18 @@ export class MockApi implements MeshApi {
     { id: 'legal-lens', label: 'Legal Lens', kind: 'ml', repo: 'legal-lens', grafana: 'azure' },
     { id: 'azure-google-stt', label: 'Azure / Google STT', kind: 'external' },
     { id: 'postgres', label: 'Postgres', kind: 'datastore' },
-    { id: 'adalat-charts', label: 'Adalat Charts (Helm)', kind: 'infra', repo: 'adalat-charts' },
+    { id: 'acme-charts', label: 'Acme Charts (Helm)', kind: 'infra', repo: 'acme-charts' },
   ]
   private mapEdges: import('@shared/types').MapEdge[] = (
     [
-      ['adalat-showcase', 'adalat-party', 'docs realtime (Yjs)', 'ws'],
-      ['adalat-party', 'cryptic', 'doc persistence', 'http'],
+      ['acme-showcase', 'acme-party', 'docs realtime (Yjs)', 'ws'],
+      ['acme-party', 'cryptic', 'doc persistence', 'http'],
       ['cryptic', 'dashboard-service', 'doc CRUD', 'http'],
-      ['adalat-showcase', 'dashboard-service', 'GraphQL: updateNode…', 'graphql'],
+      ['acme-showcase', 'dashboard-service', 'GraphQL: updateNode…', 'graphql'],
       ['dashboard-service', 'caseflow-service', 'case flows', 'http'],
       ['dashboard-service', 'postgres', 'owns schema', 'db'],
-      ['adalat-showcase', 'speech-orchestrator', 'ws: all dictation modes', 'ws'],
-      ['adalat-showcase', 'data-autonomy', 'duplicate audio', 'http'],
+      ['acme-showcase', 'speech-orchestrator', 'ws: all dictation modes', 'ws'],
+      ['acme-showcase', 'data-autonomy', 'duplicate audio', 'http'],
       ['speech-orchestrator', 'cmd-vad', 'audio segments', 'http'],
       ['speech-orchestrator', 'cmd-batch-asr', 'batch/smart ASR', 'queue'],
       ['speech-orchestrator', 'azure-google-stt', 'live modes', 'ws'],
@@ -672,7 +685,7 @@ export class MockApi implements MeshApi {
     ] as [string, string, string, string][]
   )
     .map(([from, to, label, kind], i) => ({ id: i + 1, from, to, label, kind: kind as never, status: 'accepted' as 'accepted' | 'proposed' }))
-    .concat([{ id: 99, from: 'adalat-showcase', to: 'caseflow-service', label: 'direct case query — found by INV-014', kind: 'graphql' as never, status: 'proposed' }])
+    .concat([{ id: 99, from: 'acme-showcase', to: 'caseflow-service', label: 'direct case query — found by INV-014', kind: 'graphql' as never, status: 'proposed' }])
 
   async getMap() {
     return { nodes: [...this.mapNodes], edges: [...this.mapEdges] }
@@ -690,6 +703,16 @@ export class MockApi implements MeshApi {
     if (!e) return
     if (accept) e.status = 'accepted'
     else this.mapEdges = this.mapEdges.filter((x) => x.id !== id)
+  }
+  async seedMapFromText(text: string) {
+    if (!text.trim()) return { ok: false as const, message: 'paste a description first' }
+    // simulate an extraction: two nodes + one edge appear on the map
+    this.mapNodes.push(
+      { id: 'demo-api', label: 'Demo API (from your text)', kind: 'backend' },
+      { id: 'demo-db', label: 'Demo DB', kind: 'datastore' },
+    )
+    this.mapEdges.push({ id: this.mapEdges.length + 100, from: 'demo-api', to: 'demo-db', label: 'reads/writes', kind: 'db', status: 'accepted' })
+    return { ok: true as const, nodes: 2, edges: 1 }
   }
 
   /* settings */

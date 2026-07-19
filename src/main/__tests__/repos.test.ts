@@ -32,7 +32,7 @@ describe('migrations', () => {
 
   it('learnings embedding queue: accept → pending → embedded', () => {
     const learnings = learningsRepo(db)
-    learnings.propose('INV-001', ['check adalat-charts for memory limits'])
+    learnings.propose('INV-001', ['check acme-charts for memory limits'])
     const proposed = learnings.list('proposed')
     expect(learnings.pendingEmbedding()).toHaveLength(0) // proposed ≠ pending
     learnings.decide(proposed[0].id, true)
@@ -40,7 +40,7 @@ describe('migrations', () => {
     expect(pending).toHaveLength(1)
     learnings.markEmbedded(pending[0].id)
     expect(learnings.pendingEmbedding()).toHaveLength(0)
-    expect(learnings.textsByIds([pending[0].id])[0].text).toContain('adalat-charts')
+    expect(learnings.textsByIds([pending[0].id])[0].text).toContain('acme-charts')
   })
 })
 

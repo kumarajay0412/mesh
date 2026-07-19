@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MapEdge, MapNode, MapNodeKind } from '@shared/types'
 import { getApi } from '../lib/api'
-import { Button, Pill, TextArea } from '../components/ui'
+import { Button, Modal, Pill, TextArea } from '../components/ui'
 
 // Layered layout: data flows left → right, the way the org actually flows.
 const COLUMNS: MapNodeKind[][] = [['frontend'], ['edge'], ['backend'], ['ml'], ['external', 'datastore'], ['infra']]
@@ -44,6 +44,28 @@ export function KnowledgeMap() {
   const [notes, setNotes] = useState('')
   const [view, setView] = useState({ x: -40, y: -30, zoom: 1 })
   const dragging = useRef<{ x: number; y: number } | null>(null)
+
+  // Universal seeding: paste YOUR architecture description, an LLM extracts
+  // nodes + edges. Mesh ships with an empty map — no org baked in.
+  const [seedOpen, setSeedOpen] = useState(false)
+  const [seedText, setSeedText] = useState('')
+  const [seedBusy, setSeedBusy] = useState(false)
+  const [seedError, setSeedError] = useState<string | null>(null)
+
+  const runSeed = async () => {
+    setSeedBusy(true)
+    setSeedError(null)
+    const api = await getApi()
+    const res = await api.seedMapFromText(seedText)
+    setSeedBusy(false)
+    if (!res.ok) {
+      setSeedError(res.message)
+      return
+    }
+    setSeedOpen(false)
+    setSeedText('')
+    await load()
+  }
 
   const load = async () => {
     const api = await getApi()
@@ -97,6 +119,9 @@ export function KnowledgeMap() {
             <h1 className="font-display text-[19px] font-semibold tracking-tight text-txt">Knowledge map</h1>
           </div>
           <div className="flex-1" />
+          <Button variant="quiet" onClick={() => setSeedOpen(true)}>
+            Seed from description
+          </Button>
           <label className="flex items-center gap-2 font-mono text-[11px] text-subtle">
             <input type="checkbox" checked={showInfra} onChange={(e) => setShowInfra(e.target.checked)} className="no-drag accent-[#f5c518]" />
             deploy/observe edges
@@ -129,8 +154,23 @@ export function KnowledgeMap() {
           </div>
         )}
 
+        {nodes.length === 0 && (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="max-w-[440px] rounded-md border border-line bg-ink-900 p-6 text-center">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-subtle">empty map</div>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
+                Mesh ships knowing nothing about your org. Paste a plain-language description of your system — services, who
+                calls whom — and the map extracts itself. Investigations propose additions from then on.
+              </p>
+              <Button variant="primary" className="mt-4" onClick={() => setSeedOpen(true)}>
+                Seed from description
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div
-          className="min-h-0 flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
+          className={`min-h-0 flex-1 cursor-grab overflow-hidden active:cursor-grabbing ${nodes.length === 0 ? 'hidden' : ''}`}
           onWheel={(e) => setView((v) => ({ ...v, zoom: Math.min(2.2, Math.max(0.4, v.zoom * (e.deltaY > 0 ? 0.92 : 1.08))) }))}
           onMouseDown={(e) => (dragging.current = { x: e.clientX, y: e.clientY })}
           onMouseUp={() => (dragging.current = null)}
@@ -249,13 +289,55 @@ export function KnowledgeMap() {
             </div>
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-subtle">notes · travels to the agent</div>
-              <TextArea rows={5} className="mt-1.5" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="single replica — known bottleneck; check HPA in adalat-charts…" />
+              <TextArea rows={5} className="mt-1.5" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="single replica — known bottleneck; check HPA in the Helm charts…" />
               <Button variant="primary" className="mt-2 w-full" onClick={() => void saveNotes()}>
                 Save notes
               </Button>
             </div>
           </div>
         </aside>
+      )}
+
+      {seedOpen && (
+        <Modal open onClose={() => setSeedOpen(false)} width={560}>
+          <div className="border-b border-line px-5 py-4">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-subtle">Knowledge map</div>
+            <div className="mt-0.5 font-display text-[18px] font-semibold text-txt">Seed from description</div>
+          </div>
+          <div className="flex flex-col gap-3 px-5 py-4">
+            <p className="text-[12.5px] leading-relaxed text-muted">
+              Describe your system in plain language — service names, what they do, who calls whom over what (HTTP, WebSocket,
+              queues, databases). Paste an architecture doc if you have one. Everything extracted lands as ordinary map rows
+              you can edit or delete.
+            </p>
+            <TextArea
+              rows={10}
+              value={seedText}
+              onChange={(e) => setSeedText(e.target.value)}
+              placeholder={
+                'Our frontend web-app talks to api-gateway over HTTP. The gateway calls orders-service and billing-service. ' +
+                'Orders publishes to a Kafka queue consumed by fulfillment-worker. Everything reads Postgres. ' +
+                'Deploys live in the infra-charts repo…'
+              }
+            />
+            {seedError && (
+              <div className="rounded-sm border border-[color:var(--ada-danger)]/40 bg-[rgba(242,102,74,0.06)] px-3 py-2 text-[12px] text-danger">
+                {seedError}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between border-t border-line px-5 py-3.5">
+            <span className="font-mono text-[10px] text-subtle">one Haiku call via your own Claude login · editable afterwards</span>
+            <div className="flex gap-2">
+              <Button variant="quiet" onClick={() => setSeedOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void runSeed()} disabled={seedBusy || !seedText.trim()}>
+                {seedBusy ? 'Extracting…' : 'Extract map'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )

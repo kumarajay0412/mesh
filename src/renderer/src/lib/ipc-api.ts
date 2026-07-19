@@ -111,6 +111,9 @@ export class IpcApi implements MeshApi {
   removeGrafanaInstance(name: string): Promise<void> {
     return invoke('grafana:removeInstance', { name })
   }
+  listSlackChannels(token: string) {
+    return invoke('slack:listChannels', { token })
+  }
 
   listLearnings(status?: import('@shared/types').Learning['status']): Promise<import('@shared/types').Learning[]> {
     return invoke('learnings:list', { status })
@@ -130,6 +133,9 @@ export class IpcApi implements MeshApi {
   }
   decideMapEdge(id: number, accept: boolean): Promise<void> {
     return invoke('map:decideEdge', { id, accept })
+  }
+  seedMapFromText(text: string) {
+    return invoke('map:seedFromText', { text })
   }
 
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void {

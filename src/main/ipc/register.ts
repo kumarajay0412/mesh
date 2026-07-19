@@ -19,6 +19,8 @@ import type { Engine } from '../engine/engine'
 import type { Embeddings } from '../memory/embeddings'
 import { searchMemory } from '../memory/search'
 import { runSync, knownSources, type SyncDeps } from '../sync'
+import { listChannels, friendlySlackError } from '../sync/slack'
+import { EXTRACT_SYSTEM, parseMapExtraction } from '../registry/map-extract'
 
 /** typed ipcMain.handle */
 function handle<K extends keyof Invokes>(channel: K, fn: (args: Invokes[K]['args']) => Promise<Invokes[K]['result']> | Invokes[K]['result']): void {
@@ -180,12 +182,39 @@ export function registerIpc(deps: RegisterDeps): void {
     deps.secrets.remove(`grafana.token.${name}`)
   })
 
+  // Live channel picker — token is whatever the user just typed, not yet
+  // saved. A read-only conversations.list call; nothing is persisted here.
+  handle('slack:listChannels', async ({ token }) => {
+    try {
+      return { ok: true as const, channels: await listChannels(token) }
+    } catch (e) {
+      return { ok: false as const, message: friendlySlackError(e) }
+    }
+  })
+
   // system knowledge map
   const map = mapRepo(db)
   handle('map:get', () => ({ nodes: map.nodes(), edges: map.edges() }))
   handle('map:saveNode', ({ node }) => void map.upsertNode(node))
   handle('map:addEdge', ({ from, to, label, kind }) => void map.addEdge(from, to, label, kind))
   handle('map:decideEdge', ({ id, accept }) => void map.decideEdge(id, accept))
+  // Universal seeding: the user's own architecture description → their map.
+  // Rows land as ordinary accepted nodes/edges — editable like anything else.
+  handle('map:seedFromText', async ({ text }) => {
+    if (!text.trim()) return { ok: false as const, message: 'paste a description first' }
+    if (!deps.syncDeps.llm) return { ok: false as const, message: 'no provider available for extraction' }
+    let extraction
+    try {
+      const raw = await deps.syncDeps.llm(EXTRACT_SYSTEM, text.slice(0, 24_000))
+      extraction = parseMapExtraction(raw)
+    } catch (e) {
+      return { ok: false as const, message: `extraction failed: ${(e as Error).message}` }
+    }
+    if (!extraction) return { ok: false as const, message: 'could not extract any services from that text — try naming the services and who calls whom' }
+    for (const n of extraction.nodes) map.upsertNode(n)
+    for (const e of extraction.edges) map.addEdge(e.from, e.to, e.label, e.kind)
+    return { ok: true as const, nodes: extraction.nodes.length, edges: extraction.edges.length }
+  })
 
   // learnings — the user-gated context loop
   const learnings = learningsRepo(db)

@@ -15,7 +15,6 @@ import { registerIpc, makeEmit } from './ipc/register'
 import { runSync, knownSources, type SyncDeps } from './sync'
 import { startScheduler } from './sync/scheduler'
 import { setDockIcon } from './dock-icon'
-import { seedMapIfEmpty } from './registry/seed-map'
 import { discoverServices } from './registry/discovery'
 import { servicesRepo } from './db/repos/services'
 import { log } from './log'
@@ -68,7 +67,6 @@ app.whenReady().then(() => {
   const settings = settingsRepo(db)
   const events = eventsRepo(db)
   syncStateRepo(db).resetStale() // crash recovery: a killed run must not wedge the scheduler
-  seedMapIfEmpty(db) // system knowledge map: seed once from the architecture docs
 
   // Self-populating registry: when it's empty but Grafana is connected,
   // run discovery at boot — no button required on first setup.

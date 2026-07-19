@@ -27,6 +27,8 @@ const INVOKE_CHANNELS: InvokeChannel[] = [
   'secrets:set',
   'grafana:instances',
   'grafana:removeInstance',
+  'slack:listChannels',
+  'map:seedFromText',
   'learnings:list',
   'learnings:decide',
   'map:get',

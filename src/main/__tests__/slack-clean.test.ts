@@ -10,8 +10,8 @@ describe('stripSlackMarkup', () => {
   })
 
   it('unwraps links, channels and mailto', () => {
-    expect(stripSlackMarkup('see <https://dash.adalat.ai/doc/1|the doc>')).toBe('see the doc')
-    expect(stripSlackMarkup('open <http://dashboard.adalat.ai/edit/958>')).toBe('open http://dashboard.adalat.ai/edit/958')
+    expect(stripSlackMarkup('see <https://dash.acme.dev/doc/1|the doc>')).toBe('see the doc')
+    expect(stripSlackMarkup('open <http://dashboard.acme.dev/edit/958>')).toBe('open http://dashboard.acme.dev/edit/958')
     expect(stripSlackMarkup('in <#C0123ABCDEF|reporting>')).toBe('in #reporting')
     expect(stripSlackMarkup('mail <mailto:a@b.c|a@b.c>')).toBe('mail a@b.c')
   })

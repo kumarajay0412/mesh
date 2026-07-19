@@ -92,6 +92,48 @@ export async function fetchSlackSince(
   return globalMax > 0 ? String(globalMax) : cursor
 }
 
+export interface SlackChannelOption {
+  id: string
+  name: string
+  /** can the token actually read history here, or does it need an invite first */
+  isMember: boolean
+}
+
+/** Every public/private channel the token can see — for the connect-wizard
+ *  picker, so the user SELECTS channels instead of blind-typing spellings.
+ *  Member channels sort first (those are the ones sync can read); capped at
+ *  10 pages (~2,000 channels) so a huge workspace can't hang the picker. */
+export async function listChannels(token: string): Promise<SlackChannelOption[]> {
+  const client = new WebClient(token)
+  const channels: SlackChannelOption[] = []
+  let cursor: string | undefined
+  let pages = 0
+  do {
+    const res = await client.conversations.list({ limit: 200, cursor, types: 'public_channel,private_channel', exclude_archived: true })
+    for (const c of res.channels ?? []) {
+      if (c.id && c.name) channels.push({ id: c.id, name: c.name, isMember: !!c.is_member })
+    }
+    cursor = (res.response_metadata?.next_cursor as string | undefined) || undefined
+    pages++
+  } while (cursor && pages < 10)
+  channels.sort((a, b) => (a.isMember === b.isMember ? a.name.localeCompare(b.name) : a.isMember ? -1 : 1))
+  return channels
+}
+
+/** Slack platform error codes → words a non-Slack-API-fluent user understands. */
+export function friendlySlackError(e: unknown): string {
+  const code = (e as { data?: { error?: string } })?.data?.error
+  const known: Record<string, string> = {
+    invalid_auth: 'invalid token',
+    not_authed: 'no token provided',
+    account_inactive: 'token revoked, or the account was deactivated',
+    token_revoked: 'token was revoked',
+    missing_scope: 'token is missing the channels:read scope',
+  }
+  if (code) return known[code] ?? code
+  return (e as Error)?.message ?? 'unknown error'
+}
+
 /** "#reporting" | "reporting" → C0… id; already-an-id passes through. */
 async function resolveChannelId(client: WebClient, ref: string): Promise<string> {
   const clean = ref.replace(/^#/, '').trim()

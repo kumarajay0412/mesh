@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { GrafanaInstance, SourceId } from '@shared/types'
 import { getApi } from '../../lib/api'
-import { Button, Field, Input, Modal, Pill } from '../ui'
+import { Button, Field, Input, Modal, Pill, Toggle } from '../ui'
+
+interface SlackChannelOption {
+  id: string
+  name: string
+  isMember: boolean
+}
 
 interface FieldSpec {
   key: string
@@ -29,18 +35,15 @@ const FORMS: Record<SourceId, { title: string; note: string; fields: FieldSpec[]
   },
   slack: {
     title: 'Connect Slack',
-    note: 'Token with channels:history + channels:read for every listed channel. Add the channels where incidents get reported AND where RCAs/postmortems get written up — each syncs independently and its threads become searchable memory.',
-    fields: [
-      { key: 'token', label: 'Token', secret: true, placeholder: 'xoxp-…' },
-      { key: 'channel', label: 'Channels (comma-separated)', placeholder: 'reporting-prod, incidents, postmortems' },
-    ],
+    note: 'Token with channels:history + channels:read. Paste it, then pick the channels where incidents get reported AND where RCAs/postmortems get written up — each syncs independently and its threads become searchable memory.',
+    fields: [{ key: 'token', label: 'Token', secret: true, placeholder: 'xoxp-…' }],
   },
   sentry: {
     title: 'Connect Sentry',
     note: 'User auth token — create one at sentry.io → Settings → Account → API → User Auth Tokens, with scopes: org:read, project:read, event:read. The agent gets live Sentry tools (issues, events, stack traces) in every investigation.',
     fields: [
       { key: 'token', label: 'User auth token', secret: true, placeholder: 'sntryu_…' },
-      { key: 'org', label: 'Org slug', hint: 'optional', placeholder: 'adalat-ai' },
+      { key: 'org', label: 'Org slug', hint: 'optional', placeholder: 'your-org' },
     ],
   },
 }
@@ -62,6 +65,40 @@ export function ConnectWizard({
   const [error, setError] = useState<string | null>(null)
   const [instances, setInstances] = useState<GrafanaInstance[] | null>(null)
 
+  // Slack: a live channel PICKER (conversations.list against the pasted,
+  // not-yet-saved token) instead of hand-typing spellings. Manual entry
+  // stays available as a fallback — a huge workspace or a missing
+  // channels:read scope shouldn't block connecting entirely.
+  const [slackChannels, setSlackChannels] = useState<SlackChannelOption[] | null>(null)
+  const [slackChannelsError, setSlackChannelsError] = useState<string | null>(null)
+  const [slackLoading, setSlackLoading] = useState(false)
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set())
+  const [manualChannels, setManualChannels] = useState(false)
+
+  const findChannels = async () => {
+    setSlackLoading(true)
+    setSlackChannelsError(null)
+    const api = await getApi()
+    const res = await api.listSlackChannels(values.token ?? '')
+    setSlackLoading(false)
+    if (!res.ok) {
+      setSlackChannelsError(res.message)
+      setSlackChannels(null)
+      return
+    }
+    setSlackChannels(res.channels)
+  }
+
+  const toggleChannel = (name: string) => {
+    setSelectedChannels((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      setValues((v) => ({ ...v, channel: [...next].join(', ') }))
+      return next
+    })
+  }
+
   const loadInstances = async () => {
     if (source !== 'grafana') return
     const api = await getApi()
@@ -70,6 +107,10 @@ export function ConnectWizard({
 
   useEffect(() => {
     void loadInstances()
+    setSlackChannels(null)
+    setSlackChannelsError(null)
+    setSelectedChannels(new Set())
+    setManualChannels(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source])
 
@@ -136,13 +177,78 @@ export function ConnectWizard({
             />
           </Field>
         ))}
+
+        {source === 'slack' && (
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-subtle">channels</span>
+              <button
+                className="no-drag font-mono text-[11px] text-subtle hover:text-txt"
+                onClick={() => setManualChannels((m) => !m)}
+              >
+                {manualChannels ? 'back to picker' : 'type names manually'}
+              </button>
+            </div>
+
+            {manualChannels ? (
+              <Field label="Channels (comma-separated)" hint="names or #names, no need to know exact casing">
+                <Input
+                  placeholder="reporting-prod, incidents, postmortems"
+                  value={values.channel ?? ''}
+                  onChange={(e) => setValues((v) => ({ ...v, channel: e.target.value }))}
+                />
+              </Field>
+            ) : (
+              <>
+                {!slackChannels && (
+                  <Button variant="quiet" onClick={() => void findChannels()} disabled={slackLoading || !values.token?.trim()}>
+                    {slackLoading ? 'Finding channels…' : 'Find channels'}
+                  </Button>
+                )}
+                {slackChannelsError && (
+                  <div className="rounded-sm border border-[color:var(--ada-danger)]/40 bg-[rgba(242,102,74,0.06)] px-3 py-2 text-[12px] text-danger">
+                    {slackChannelsError}
+                  </div>
+                )}
+                {slackChannels && (
+                  <div className="flex max-h-64 flex-col gap-1 overflow-y-auto rounded-md border border-line bg-ink-900 p-2">
+                    {slackChannels.length === 0 && (
+                      <p className="px-2 py-1.5 text-[12px] text-subtle">no channels visible to this token</p>
+                    )}
+                    {slackChannels.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2.5 rounded-sm px-2 py-1.5 hover:bg-ink-850">
+                        <Toggle on={selectedChannels.has(c.name)} onChange={() => toggleChannel(c.name)} />
+                        <span className="font-mono text-[12px] text-txt">#{c.name}</span>
+                        {!c.isMember && <Pill tone="warn">not a member yet</Pill>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {slackChannels && (
+                  <button className="no-drag self-start font-mono text-[11px] text-subtle hover:text-txt" onClick={() => void findChannels()}>
+                    refresh list
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {error && <div className="rounded-sm border border-[color:var(--ada-danger)]/40 bg-[rgba(242,102,74,0.06)] px-3 py-2 text-[12px] text-danger">{error}</div>}
       </div>
       <div className="flex items-center justify-between border-t border-line px-5 py-3.5">
         <span className="font-mono text-[10px] text-subtle">stored in the OS keychain · read-scoped · yours</span>
         <div className="flex gap-2">
           <Button variant="quiet" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={busy || spec.fields.some((f) => !f.optional && !values[f.key]?.trim())}>
+          <Button
+            variant="primary"
+            onClick={() => void submit()}
+            disabled={
+              busy ||
+              spec.fields.some((f) => !f.optional && !values[f.key]?.trim()) ||
+              (source === 'slack' && !values.channel?.trim())
+            }
+          >
             {busy ? 'Validating…' : source === 'grafana' ? 'Add instance' : 'Connect'}
           </Button>
         </div>
