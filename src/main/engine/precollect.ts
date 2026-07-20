@@ -126,11 +126,13 @@ function escapeRe(s: string): string {
 }
 
 /** The four kube-state-metrics queries for one service over [durMs]. Pod names
- *  are `<deployment>-<hash>`, so we match by prefix. Pure; tested. */
-export function buildK8sQueries(name: string, durMs: number): { restarts: string; ooms: string; deploys: string; unavailable: string } {
+ *  are `<deployment>-<hash>`, so we match by prefix; a known namespace narrows
+ *  it further (avoids collisions across namespaces). Pure; tested. */
+export function buildK8sQueries(name: string, durMs: number, namespace?: string): { restarts: string; ooms: string; deploys: string; unavailable: string } {
   const dur = `${Math.max(1, Math.round(durMs / 60_000))}m`
-  const pod = `pod=~"${escapeRe(name)}.*"`
-  const dep = `deployment=~"${escapeRe(name)}.*"`
+  const nsSel = namespace ? `,namespace="${escapeRe(namespace)}"` : ''
+  const pod = `pod=~"${escapeRe(name)}.*"${nsSel}`
+  const dep = `deployment=~"${escapeRe(name)}.*"${nsSel}`
   return {
     restarts: `sum(increase(kube_pod_container_status_restarts_total{${pod}}[${dur}]))`,
     ooms: `sum(max_over_time(kube_pod_container_status_last_terminated_reason{reason="OOMKilled",${pod}}[${dur}]))`,
@@ -242,7 +244,7 @@ export async function preCollect(
       // (b) Kubernetes signals via Prometheus — durable deploy/restart/OOM
       // history that live `kubectl get events` (~1h TTL) can't provide.
       if (ctx.promUid) {
-        const q = buildK8sQueries(podNameOf(svc), durMs)
+        const q = buildK8sQueries(podNameOf(svc), durMs, svc.namespace)
         try {
           const [restarts, ooms, deploysN, maxUnavailable] = await Promise.all([
             promInstant(ctx.url, ctx.token, ctx.promUid, q.restarts, window.toMs),

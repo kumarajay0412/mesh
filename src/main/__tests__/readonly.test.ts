@@ -48,3 +48,37 @@ describe('isReadOnlyCommand (unchanged behavior sanity check)', () => {
     expect(isReadOnlyCommand('git log; rm -rf /')).toBe(false)
   })
 })
+
+describe('kubectl read-only classification (Phase 2 — context/namespace flags)', () => {
+  it('allows a plain read verb', () => {
+    expect(isReadOnlyCommand('kubectl get pods -n prod')).toBe(true)
+    expect(isReadOnlyCommand('kubectl describe pod x')).toBe(true)
+    expect(isReadOnlyCommand('kubectl rollout history deploy/cmd-batch-asr')).toBe(true)
+    expect(isReadOnlyCommand('kubectl events')).toBe(true)
+  })
+
+  it('allows leading --context / -n flags before the verb (the whole point)', () => {
+    expect(isReadOnlyCommand('kubectl --context gke-prod get pods')).toBe(true)
+    expect(isReadOnlyCommand('kubectl --context gke-prod -n dictation get pods')).toBe(true)
+    expect(isReadOnlyCommand('kubectl --context=aks-prod --namespace=default describe deploy/x')).toBe(true)
+    expect(isReadOnlyCommand('kubectl -n prod rollout status deploy/x')).toBe(true)
+    expect(isReadOnlyCommand('kubectl --context c -A get pods')).toBe(true) // boolean -A consumes no value
+  })
+
+  it('gates write verbs even behind safe flags', () => {
+    expect(isReadOnlyCommand('kubectl --context gke-prod delete pod x')).toBe(false)
+    expect(isReadOnlyCommand('kubectl -n prod apply -f m.yaml')).toBe(false)
+    expect(isReadOnlyCommand('kubectl rollout restart deploy/x')).toBe(false)
+    expect(isReadOnlyCommand('kubectl exec pod -- sh')).toBe(false)
+  })
+
+  it('gates auth-changing flags (impersonation must not slip through)', () => {
+    expect(isReadOnlyCommand('kubectl --as admin get secrets')).toBe(false)
+    expect(isReadOnlyCommand('kubectl --token abc get pods')).toBe(false)
+  })
+
+  it('still blocks smuggling regardless of the verb', () => {
+    expect(isReadOnlyCommand('kubectl get pods; rm -rf /')).toBe(false)
+    expect(isReadOnlyCommand('kubectl get pods | tee /etc/x')).toBe(false)
+  })
+})

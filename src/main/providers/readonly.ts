@@ -4,8 +4,6 @@
 
 const READ_ONLY_PATTERNS: RegExp[] = [
   /^git\s+(log|show|diff|blame|status|branch\b|rev-parse|describe|shortlog|ls-files|grep)\b/,
-  /^kubectl\s+(get|describe|logs|top|explain|api-resources|version|cluster-info)\b/,
-  /^kubectl\s+rollout\s+(history|status)\b/,
   /^(rg|grep|ls|cat|head|tail|wc|find|stat|file|du|df|pwd|which|whoami|date|env)\b/,
   /^(jq|yq|sort|uniq|cut|awk|sed\s+-n)\b/, // text filters (sed only in -n print mode)
   /^echo\b/,
@@ -14,9 +12,39 @@ const READ_ONLY_PATTERNS: RegExp[] = [
 // Shell metacharacters that can smuggle a write past a read-only prefix.
 const SMUGGLING = /[;&|]|\$\(|`|>\s*\S|>>/
 
+const KUBECTL_READ_VERBS = new Set(['get', 'describe', 'logs', 'top', 'explain', 'api-resources', 'api-versions', 'version', 'cluster-info', 'events'])
+// Global flags safe to appear BEFORE the verb. Cluster/namespace targeting is
+// the whole point of Phase 2; auth-changing flags (--as, --token, --username…)
+// are deliberately NOT here, so impersonation still hits the approval gate.
+const KUBECTL_SAFE_FLAGS = new Set([
+  '--context', '--namespace', '-n', '--cluster', '--kubeconfig', '--request-timeout', '-o', '--output',
+  '--field-selector', '--selector', '-l', '--sort-by', '--all-namespaces', '-A', '--since', '--tail', '--previous', '-p',
+])
+const KUBECTL_BOOL_FLAGS = new Set(['--all-namespaces', '-A', '--previous', '-p'])
+
+/** kubectl is read-only when, after any leading SAFE global flags, the verb is
+ *  a read verb (or `rollout history|status`). Tolerates `--context X -n Y`,
+ *  which the old anchored regex rejected — every such call hit the approval
+ *  modal. SMUGGLING is already screened out by isReadOnlyCommand before here. */
+function isReadOnlyKubectl(cmd: string): boolean {
+  const tokens = cmd.split(/\s+/)
+  if (tokens[0] !== 'kubectl') return false
+  let i = 1
+  while (i < tokens.length && tokens[i].startsWith('-')) {
+    const flag = tokens[i].split('=')[0]
+    if (!KUBECTL_SAFE_FLAGS.has(flag)) return false // unknown/unsafe flag before the verb → gate it
+    const consumesValue = !tokens[i].includes('=') && !KUBECTL_BOOL_FLAGS.has(flag)
+    i += consumesValue ? 2 : 1 // skip the flag's separate value token too
+  }
+  const verb = tokens[i]
+  if (verb === 'rollout') return tokens[i + 1] === 'history' || tokens[i + 1] === 'status'
+  return KUBECTL_READ_VERBS.has(verb)
+}
+
 export function isReadOnlyCommand(command: string): boolean {
   const cmd = command.trim()
   if (SMUGGLING.test(cmd)) return false
+  if (cmd.startsWith('kubectl')) return isReadOnlyKubectl(cmd)
   return READ_ONLY_PATTERNS.some((p) => p.test(cmd))
 }
 

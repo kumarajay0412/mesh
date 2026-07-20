@@ -142,12 +142,16 @@ export function buildDynamicContext(services: ServiceEntry[], similar: MemorySea
   if (services.length > 0) {
     parts.push(
       '\nSERVICE REGISTRY (candidate services — name · repo · how to find it):',
-      ...services.map(
-        (s) =>
-          `- ${s.name} → repo ${s.repo ?? '?'} · ${s.serving ?? ''} · ids: ${Object.entries(s.ids)
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')}${s.knownSolutions.length ? `\n  known solutions: ${s.knownSolutions.map((k) => `${k.symptom} → ${k.fix}`).join('; ')}` : ''}`,
-      ),
+      ...services.map((s) => {
+        // A concrete, ready-to-run kubectl prefix when the service's cluster is
+        // mapped — so live inspection targets the right cluster/namespace.
+        const ctx = s.ids.k8s_context
+        const ns = s.namespace
+        const kubectl = ctx ? `\n  live k8s: kubectl --context ${ctx}${ns ? ` -n ${ns}` : ''} get/describe/logs/rollout (read-only)` : ''
+        return `- ${s.name} → repo ${s.repo ?? '?'} · ${s.serving ?? ''} · ids: ${Object.entries(s.ids)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ')}${kubectl}${s.knownSolutions.length ? `\n  known solutions: ${s.knownSolutions.map((k) => `${k.symptom} → ${k.fix}`).join('; ')}` : ''}`
+      }),
     )
   }
 

@@ -25,10 +25,23 @@ export function ServiceEditor({ entry, onSave, onClose }: { entry: ServiceEntry;
           <Field label="Repo">
             <Input value={draft.repo ?? ''} onChange={(e) => set('repo', e.target.value)} />
           </Field>
-          <Field label="Namespace">
+          <Field label="K8s namespace" hint="for live kubectl + metrics">
             <Input value={draft.namespace ?? ''} onChange={(e) => set('namespace', e.target.value)} />
           </Field>
         </div>
+        <Field label="Cluster context" hint="kubectl --context name (GKE/AKS); enables live read-only kubectl for this service">
+          <Input
+            placeholder="gke-prod / aks-dictation"
+            value={draft.ids.k8s_context ?? ''}
+            onChange={(e) => {
+              const ids = { ...draft.ids }
+              const v = e.target.value.trim()
+              if (v) ids.k8s_context = v
+              else delete ids.k8s_context
+              set('ids', ids)
+            }}
+          />
+        </Field>
         <Field label="Aliases" hint="comma-separated">
           <Input
             value={draft.aliases.join(', ')}

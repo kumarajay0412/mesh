@@ -98,4 +98,10 @@ describe('buildK8sQueries', () => {
     const q = buildK8sQueries('api.v2', 60_000)
     expect(q.restarts).toContain('pod=~"api\\.v2.*"')
   })
+
+  it('scopes to a namespace when one is known (Phase 2)', () => {
+    const q = buildK8sQueries('cmd-batch-asr', 60_000, 'dictation')
+    expect(q.restarts).toContain('pod=~"cmd-batch-asr.*",namespace="dictation"')
+    expect(q.deploys).toContain('deployment=~"cmd-batch-asr.*",namespace="dictation"')
+  })
 })
