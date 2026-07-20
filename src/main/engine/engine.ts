@@ -25,6 +25,7 @@ import { findIssueIdByIdentifier, postLinearComment } from '../sync/linear'
 import { runIntake } from './intake'
 import { buildMemoryMcp } from './memory-tools'
 import { buildDynamicContext, staticRunbook } from './runbook'
+import { preCollect, formatBrief } from './precollect'
 import { formatReportComment } from './report-format'
 import { extractReport } from './report-schema'
 import { extractSignature } from '../memory/signature'
@@ -176,6 +177,43 @@ export class Engine {
     // DYNAMIC suffix — per-investigation: learnings + candidate registry +
     // similar incidents + time window + the ticket under investigation.
     let systemDynamic = buildDynamicContext(uniqueServices, similarHits, intake.timeWindow, learned)
+
+    // Deterministic pre-collection (Move 2): run runbook steps 1-3 (window,
+    // deploys, error-rate triage) as CODE now, so the agent starts at judgment.
+    // Best-effort — degrades to the agent doing it itself. Bounded ~12s.
+    try {
+      this.push(id, { kind: 'status', text: 'pre-collecting deploy + error signals…', ts: Date.now() })
+      const brief = await preCollect(db, this.deps.secrets, {
+        services: uniqueServices,
+        timeWindow: intake.timeWindow,
+        anchorMs: ticketRecord?.reportedAt ?? undefined,
+      })
+      const briefText = formatBrief(brief)
+      if (briefText) {
+        systemDynamic += `\n${briefText}`
+        events.append(id, 'precollect', brief as unknown as Record<string, unknown>)
+        // surface the strongest deterministic signals on the timeline/evidence
+        if (brief?.window) this.push(id, { kind: 'status', text: `onset window pinned: ${new Date(brief.window.fromMs).toISOString().slice(0, 16)}–${new Date(brief.window.toMs).toISOString().slice(11, 16)}Z`, ts: Date.now() })
+        for (const d of (brief?.deploys ?? []).slice(0, 3)) {
+          this.push(id, {
+            kind: 'evidence',
+            evidence: { id: `deploy-${d.timeMs}`, type: 'grafana', claim: `deploy in window: ${d.text}`, source: `${d.instance} · Grafana annotations`, ts: Date.now() },
+            ts: Date.now(),
+          })
+        }
+        for (const e of brief?.errorDeltas ?? []) {
+          const ratio = e.baselineCount > 0 ? `${(e.windowCount / e.baselineCount).toFixed(1)}x baseline` : e.windowCount > 0 ? 'new vs 0 baseline' : 'flat'
+          this.push(id, {
+            kind: 'evidence',
+            evidence: { id: `errdelta-${e.service}`, type: 'logql', claim: `${e.service} errors ${e.windowCount} vs ${e.baselineCount} 24h earlier — ${ratio}`, source: `${e.instance} · Loki count_over_time`, ts: Date.now() },
+            ts: Date.now(),
+          })
+        }
+      }
+    } catch (e) {
+      l.warn(`pre-collect failed (non-fatal): ${(e as Error).message}`)
+    }
+
     if (ticketRecord) {
       const comments = ticketRecord.rawCommentsJson ? boundedComments(ticketRecord.rawCommentsJson) : ''
       systemDynamic += `\n\nTHE TICKET UNDER INVESTIGATION (${ticketRecord.identifier} — full content, already fetched; do NOT WebFetch linear.app):\ntitle: ${ticketRecord.title}\nsymptoms: ${ticketRecord.symptoms}${ticketRecord.labels.length ? `\nlabels: ${ticketRecord.labels.join(', ')}` : ''}${comments ? `\n--- discussion so far ---\n${comments}` : ''}`

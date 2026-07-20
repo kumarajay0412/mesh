@@ -61,10 +61,11 @@ The system prompt is assembled fresh per investigation, in this order:
 | **Similar past incidents** | memory search (any source) | symptoms, root cause, and the fix that worked — flagged "strong priors, verify before trusting". Fields clip at ~250 chars with a pointer to `get_incident <id>`: depth is one tool call away, not pre-paid on every turn |
 | **System map** | Knowledge Map, accepted edges only | the org topology (who calls whom, over what) so the agent starts knowing the flows |
 | **Repos available** | live scan of the repo root | the ~182 local checkouts it may `git log/blame/show` and `rg` through |
+| **Pre-collected brief** | `src/main/engine/precollect.ts`, best-effort | runbook steps 1–3 run *as code* before the session: the onset window normalized to epoch, Grafana deploy annotations in that window, and Loki error-rate deltas (in-window vs the same window 24h earlier) per candidate service. The agent audits it and starts at step 4 instead of doing the epoch math and annotation lookups by hand — the deterministic-precollect move. Absent Grafana or on any failed query it degrades to a note and the agent does that part itself |
 | **The ticket under investigation** | ingested memory record | full title/symptoms/labels + a head-and-tail-bounded slice of the comment thread (6 KB budget — resolution talk lives at the end) |
 | **Sentry note** | only when a token is connected | tells the agent live Sentry MCP tools exist |
 
-The initial user turn is short — symptoms, onset window, ticket ref, and "end with the ` ```mesh-report ` block."
+The prompt is split at `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`: the invariant prefix (runbook + system map + repos list) is prompt-cached cross-session; everything per-investigation (learnings, registry, similar incidents, the pre-collected brief, the ticket) is the dynamic suffix. The initial user turn is short — symptoms, onset window, ticket ref, and "end with the ` ```mesh-report ` block."
 
 ## The agentic loop itself (`src/main/providers/claude.ts`)
 
@@ -166,4 +167,4 @@ Each spawn writes a row in `sessions` (provider, model, effort, permission mode,
 
 ---
 
-*Code map: engine orchestration `src/main/engine/engine.ts` · runbook + prompt assembly `src/main/engine/runbook.ts` · intake `src/main/engine/intake.ts` · in-session memory tools `src/main/engine/memory-tools.ts` · SDK adapter + gate `src/main/providers/claude.ts` · read-only policy `src/main/providers/readonly.ts` · approval broker `src/main/ipc/approvals.ts` · report schema `src/main/engine/report-schema.ts` · report → Linear markdown `src/main/engine/report-format.ts` · memory search `src/main/memory/search.ts` · ingestion `src/main/sync/` (`linear.ts` · `slack.ts` + `slack-clean.ts` · `distill.ts`).*
+*Code map: engine orchestration `src/main/engine/engine.ts` · runbook + prompt assembly `src/main/engine/runbook.ts` · intake `src/main/engine/intake.ts` · deterministic pre-collect `src/main/engine/precollect.ts` · in-session memory tools `src/main/engine/memory-tools.ts` · SDK adapter + gate `src/main/providers/claude.ts` · read-only policy `src/main/providers/readonly.ts` · approval broker `src/main/ipc/approvals.ts` · report schema `src/main/engine/report-schema.ts` · report → Linear markdown `src/main/engine/report-format.ts` · memory search `src/main/memory/search.ts` · ingestion `src/main/sync/` (`linear.ts` · `slack.ts` + `slack-clean.ts` · `distill.ts`).*
