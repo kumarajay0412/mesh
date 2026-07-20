@@ -36,10 +36,23 @@ export interface DeployMarker {
   timeMs: number
 }
 
+/** Kubernetes state in the onset window, from kube-state-metrics via the
+ *  Grafana Prometheus datasource — no cluster credentials needed. A null field
+ *  means the metric wasn't present (different exporter, or no data). */
+export interface K8sSignal {
+  service: string
+  instance: string
+  restarts: number | null // pod container restarts in the window
+  ooms: number | null // pods whose last termination was OOMKilled
+  deploys: number | null // deployment generation changes (rollouts)
+  maxUnavailable: number | null // peak unavailable replicas (readiness/liveness)
+}
+
 export interface PreCollectBrief {
   window: OnsetWindow | null
   deploys: DeployMarker[]
   errorDeltas: ErrorDelta[]
+  k8s: K8sSignal[]
   notes: string[] // degradations, for honesty
 }
 
@@ -89,10 +102,41 @@ function readInstances(db: Database): { name: string; url: string }[] {
   return r ? (JSON.parse(r.value_json) as { name: string; url: string }[]) : []
 }
 
-/** First Loki datasource uid on an instance (cached per call by the caller). */
-async function lokiUid(base: string, token: string): Promise<string | null> {
+/** Loki + Prometheus datasource uids on an instance, in one call. */
+async function resolveDatasources(base: string, token: string): Promise<{ lokiUid: string | null; promUid: string | null }> {
   const dss = (await gfetch(base, token, '/api/datasources')) as { uid: string; type: string }[]
-  return dss.find((d) => d.type === 'loki')?.uid ?? null
+  return {
+    lokiUid: dss.find((d) => d.type === 'loki')?.uid ?? null,
+    promUid: dss.find((d) => d.type === 'prometheus')?.uid ?? null,
+  }
+}
+
+/** Instant PromQL query → scalar (null when absent). Resources path (Grafana
+ *  ≥8); best-effort, so any failure surfaces as null and a note upstream. */
+async function promInstant(base: string, token: string, uid: string, query: string, timeMs: number): Promise<number | null> {
+  const url = `/api/datasources/uid/${uid}/resources/api/v1/query?query=${encodeURIComponent(query)}&time=${Math.round(timeMs / 1000)}`
+  const r = (await gfetch(base, token, url)) as { data?: { result?: { value?: [number, string] }[] } }
+  const v = r.data?.result?.[0]?.value?.[1]
+  return v != null ? Number(v) : null
+}
+
+/** Escape a service name for safe use inside a PromQL `=~` regex matcher. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** The four kube-state-metrics queries for one service over [durMs]. Pod names
+ *  are `<deployment>-<hash>`, so we match by prefix. Pure; tested. */
+export function buildK8sQueries(name: string, durMs: number): { restarts: string; ooms: string; deploys: string; unavailable: string } {
+  const dur = `${Math.max(1, Math.round(durMs / 60_000))}m`
+  const pod = `pod=~"${escapeRe(name)}.*"`
+  const dep = `deployment=~"${escapeRe(name)}.*"`
+  return {
+    restarts: `sum(increase(kube_pod_container_status_restarts_total{${pod}}[${dur}]))`,
+    ooms: `sum(max_over_time(kube_pod_container_status_last_terminated_reason{reason="OOMKilled",${pod}}[${dur}]))`,
+    deploys: `sum(changes(kube_deployment_status_observed_generation{${dep}}[${dur}]))`,
+    unavailable: `max(max_over_time(kube_deployment_status_replicas_unavailable{${dep}}[${dur}]))`,
+  }
 }
 
 /** `app=cmd-batch-asr` → `{app="cmd-batch-asr"}` (LogQL stream selector). */
@@ -134,19 +178,20 @@ export async function preCollect(
   if (instances.length === 0) {
     // No Grafana → nothing deterministic to collect. Still report the window if
     // we could anchor one — it saves the agent the epoch math.
-    return window ? { window, deploys: [], errorDeltas: [], notes: ['Grafana not connected — deploy/error signals not pre-collected'] } : null
+    return window ? { window, deploys: [], errorDeltas: [], k8s: [], notes: ['Grafana not connected — deploy/error/k8s signals not pre-collected'] } : null
   }
   if (!window) {
     notes.push('onset window could not be determined from the ticket — establish it first (runbook step 1)')
-    return { window: null, deploys: [], errorDeltas: [], notes }
+    return { window: null, deploys: [], errorDeltas: [], k8s: [], notes }
   }
 
   const durMs = Math.min(24 * 3600_000, Math.max(15 * 60_000, window.toMs - window.fromMs))
   const deploys: DeployMarker[] = []
   const errorDeltas: ErrorDelta[] = []
+  const k8s: K8sSignal[] = []
 
-  // token + loki uid per instance, resolved once
-  const instCtx = new Map<string, { url: string; token: string; uid: string | null }>()
+  // token + datasource uids (loki + prometheus) per instance, resolved once
+  const instCtx = new Map<string, { url: string; token: string; lokiUid: string | null; promUid: string | null }>()
   await Promise.all(
     instances.map(async (inst) => {
       const token = secrets.get(`grafana.token.${inst.name}`)
@@ -154,13 +199,13 @@ export async function preCollect(
         notes.push(`Grafana "${inst.name}": no readable token`)
         return
       }
-      let uid: string | null = null
+      let ds = { lokiUid: null as string | null, promUid: null as string | null }
       try {
-        uid = await lokiUid(inst.url, token)
+        ds = await resolveDatasources(inst.url, token)
       } catch (e) {
         notes.push(`Grafana "${inst.name}": datasource lookup failed (${(e as Error).message})`)
       }
-      instCtx.set(inst.name, { url: inst.url, token, uid })
+      instCtx.set(inst.name, { url: inst.url, token, ...ds })
       // deploy markers (instance-level, cheap)
       try {
         for (const a of await deployAnnotations(inst.url, token, window.fromMs, window.toMs)) deploys.push({ instance: inst.name, ...a })
@@ -170,29 +215,56 @@ export async function preCollect(
     }),
   )
 
-  // error-rate deltas for the candidate services that have a Loki label
-  const candidates = input.services.filter((s) => s.ids.loki_label).slice(0, MAX_SERVICES)
+  // Per candidate service: Loki error-rate delta (needs loki_label) AND
+  // kube-state-metrics signals (needs only the service/pod name).
+  const candidates = input.services.slice(0, MAX_SERVICES)
+  const podNameOf = (svc: ServiceEntry) => svc.ids.loki_label?.match(/=\s*(.+)$/)?.[1]?.trim() || svc.name
   await Promise.all(
     candidates.map(async (svc) => {
       const instName = svc.ids.grafana_instance
       const ctx = instName ? instCtx.get(instName) : [...instCtx.values()][0]
-      const selector = toSelector(svc.ids.loki_label)
-      if (!ctx?.uid || !selector) return
-      try {
-        const [windowCount, baselineCount] = await Promise.all([
-          lokiErrorCount(ctx.url, ctx.token, ctx.uid, selector, window.toMs, durMs),
-          lokiErrorCount(ctx.url, ctx.token, ctx.uid, selector, window.toMs - 24 * 3600_000, durMs),
-        ])
-        errorDeltas.push({ service: svc.name, instance: instName ?? '?', windowCount, baselineCount })
-      } catch (e) {
-        notes.push(`${svc.name}: error-rate query failed (${(e as Error).message})`)
+      if (!ctx) return
+
+      // (a) Loki error-rate delta
+      const selector = svc.ids.loki_label ? toSelector(svc.ids.loki_label) : null
+      if (ctx.lokiUid && selector) {
+        try {
+          const [windowCount, baselineCount] = await Promise.all([
+            lokiErrorCount(ctx.url, ctx.token, ctx.lokiUid, selector, window.toMs, durMs),
+            lokiErrorCount(ctx.url, ctx.token, ctx.lokiUid, selector, window.toMs - 24 * 3600_000, durMs),
+          ])
+          errorDeltas.push({ service: svc.name, instance: instName ?? '?', windowCount, baselineCount })
+        } catch (e) {
+          notes.push(`${svc.name}: error-rate query failed (${(e as Error).message})`)
+        }
+      }
+
+      // (b) Kubernetes signals via Prometheus — durable deploy/restart/OOM
+      // history that live `kubectl get events` (~1h TTL) can't provide.
+      if (ctx.promUid) {
+        const q = buildK8sQueries(podNameOf(svc), durMs)
+        try {
+          const [restarts, ooms, deploysN, maxUnavailable] = await Promise.all([
+            promInstant(ctx.url, ctx.token, ctx.promUid, q.restarts, window.toMs),
+            promInstant(ctx.url, ctx.token, ctx.promUid, q.ooms, window.toMs),
+            promInstant(ctx.url, ctx.token, ctx.promUid, q.deploys, window.toMs),
+            promInstant(ctx.url, ctx.token, ctx.promUid, q.unavailable, window.toMs),
+          ])
+          if ([restarts, ooms, deploysN, maxUnavailable].some((v) => v != null)) {
+            k8s.push({ service: svc.name, instance: instName ?? '?', restarts, ooms, deploys: deploysN, maxUnavailable })
+          }
+        } catch (e) {
+          notes.push(`${svc.name}: k8s metrics query failed (${(e as Error).message})`)
+        }
       }
     }),
   )
 
-  if (input.services.length && candidates.length === 0) notes.push('candidate services have no Loki label in the registry — run Discover from Grafana to enable error-rate triage')
-  l.info(`pre-collect: window ${new Date(window.fromMs).toISOString()}–${new Date(window.toMs).toISOString()} · ${deploys.length} deploys · ${errorDeltas.length} error deltas`)
-  return { window, deploys, errorDeltas, notes }
+  const anyProm = [...instCtx.values()].some((c) => c.promUid)
+  if (!anyProm && input.services.length) notes.push('no Prometheus datasource on the connected Grafana — pod restart/OOM/deploy signals unavailable (agent will use live kubectl if configured)')
+  if (input.services.length && !input.services.some((s) => s.ids.loki_label)) notes.push('candidate services have no Loki label in the registry — run Discover from Grafana to enable error-rate triage')
+  l.info(`pre-collect: window ${new Date(window.fromMs).toISOString()}–${new Date(window.toMs).toISOString()} · ${deploys.length} deploys · ${errorDeltas.length} error deltas · ${k8s.length} k8s`)
+  return { window, deploys, errorDeltas, k8s, notes }
 }
 
 /* ----------------------------------------------------------- formatting -- */
@@ -226,9 +298,25 @@ export function formatBrief(brief: PreCollectBrief | null): string {
     lines.push('  (A large delta = follow that service first. Flat = the error is elsewhere or pre-existing.)')
   }
 
+  const k8sLines = brief.k8s
+    .map((s) => {
+      const bits: string[] = []
+      if (s.restarts && s.restarts >= 1) bits.push(`${Math.round(s.restarts)} pod restart(s)`)
+      if (s.ooms && s.ooms >= 1) bits.push(`${Math.round(s.ooms)} OOMKilled`)
+      if (s.deploys && s.deploys >= 1) bits.push(`${Math.round(s.deploys)} deploy(s)`)
+      if (s.maxUnavailable && s.maxUnavailable >= 1) bits.push(`peak ${Math.round(s.maxUnavailable)} unavailable replica(s)`)
+      return bits.length ? `    ${s.service}: ${bits.join(' · ')}` : null
+    })
+    .filter((x): x is string => x !== null)
+  if (k8sLines.length) {
+    lines.push('- Kubernetes in the window (from Grafana Prometheus / kube-state-metrics — durable, unlike live `kubectl get events`):')
+    lines.push(...k8sLines)
+    lines.push('  (Restarts/OOMs at a deploy boundary point at that rollout; without one, look at resource limits, probes, or the node.)')
+  }
+
   if (brief.notes.length) lines.push(`- Gaps (do these yourself): ${brief.notes.join('; ')}`)
 
   // Only worth injecting if we actually collected something beyond notes.
-  const hasSignal = brief.window || brief.deploys.length || brief.errorDeltas.length
+  const hasSignal = brief.window || brief.deploys.length || brief.errorDeltas.length || k8sLines.length
   return hasSignal ? lines.join('\n') : ''
 }

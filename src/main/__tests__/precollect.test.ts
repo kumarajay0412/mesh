@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseWindow, formatBrief, type PreCollectBrief } from '../engine/precollect'
+import { parseWindow, formatBrief, buildK8sQueries, type PreCollectBrief } from '../engine/precollect'
 
 const anchor = Date.UTC(2026, 6, 8, 6, 0) // Jul 8 2026, 06:00Z — a ticket report time
 
@@ -39,6 +39,7 @@ describe('formatBrief', () => {
     window: { fromMs: Date.UTC(2026, 6, 8, 2, 0), toMs: Date.UTC(2026, 6, 8, 15, 0), source: 'stated range' },
     deploys: [{ instance: 'prod', text: 'deploy cmd-batch-asr v2', timeMs: Date.UTC(2026, 6, 8, 6, 41) }],
     errorDeltas: [{ service: 'cmd-batch-asr', instance: 'prod', windowCount: 413, baselineCount: 9 }],
+    k8s: [],
     notes: [],
   }
 
@@ -62,6 +63,39 @@ describe('formatBrief', () => {
 
   it('returns empty string when there is no signal at all', () => {
     expect(formatBrief(null)).toBe('')
-    expect(formatBrief({ window: null, deploys: [], errorDeltas: [], notes: ['x'] })).toBe('')
+    expect(formatBrief({ window: null, deploys: [], errorDeltas: [], k8s: [], notes: ['x'] })).toBe('')
+  })
+
+  it('renders kube-state-metrics signals, omitting zero fields', () => {
+    const s = formatBrief({
+      ...base,
+      k8s: [
+        { service: 'cmd-batch-asr', instance: 'prod', restarts: 12, ooms: 12, deploys: 1, maxUnavailable: 0 },
+        { service: 'quiet-svc', instance: 'prod', restarts: 0, ooms: 0, deploys: 0, maxUnavailable: 0 },
+      ],
+    })
+    expect(s).toMatch(/Kubernetes in the window/)
+    expect(s).toMatch(/cmd-batch-asr: 12 pod restart\(s\) · 12 OOMKilled · 1 deploy\(s\)/)
+    expect(s).not.toMatch(/unavailable replica/) // maxUnavailable 0 omitted
+    expect(s).not.toMatch(/quiet-svc/) // all-zero service produces no line
+  })
+
+  it('a brief with ONLY k8s signal still injects', () => {
+    const s = formatBrief({ window: null, deploys: [], errorDeltas: [], k8s: [{ service: 'x', instance: 'p', restarts: 3, ooms: null, deploys: null, maxUnavailable: null }], notes: [] })
+    expect(s).toMatch(/x: 3 pod restart\(s\)/)
+  })
+})
+
+describe('buildK8sQueries', () => {
+  it('builds prefix-matched kube-state-metrics PromQL with a minute duration', () => {
+    const q = buildK8sQueries('cmd-batch-asr', 3 * 3600_000)
+    expect(q.restarts).toBe('sum(increase(kube_pod_container_status_restarts_total{pod=~"cmd-batch-asr.*"}[180m]))')
+    expect(q.ooms).toMatch(/kube_pod_container_status_last_terminated_reason\{reason="OOMKilled",pod=~"cmd-batch-asr\.\*"\}/)
+    expect(q.deploys).toMatch(/changes\(kube_deployment_status_observed_generation\{deployment=~"cmd-batch-asr\.\*"\}\[180m\]\)/)
+  })
+
+  it('regex-escapes service names so a dotted name is not a wildcard', () => {
+    const q = buildK8sQueries('api.v2', 60_000)
+    expect(q.restarts).toContain('pod=~"api\\.v2.*"')
   })
 })

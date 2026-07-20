@@ -209,6 +209,21 @@ export class Engine {
             ts: Date.now(),
           })
         }
+        for (const k of brief?.k8s ?? []) {
+          const bits = [
+            k.restarts && k.restarts >= 1 ? `${Math.round(k.restarts)} restarts` : '',
+            k.ooms && k.ooms >= 1 ? `${Math.round(k.ooms)} OOMKilled` : '',
+            k.deploys && k.deploys >= 1 ? `${Math.round(k.deploys)} deploys` : '',
+            k.maxUnavailable && k.maxUnavailable >= 1 ? `peak ${Math.round(k.maxUnavailable)} unavailable` : '',
+          ].filter(Boolean)
+          if (bits.length) {
+            this.push(id, {
+              kind: 'evidence',
+              evidence: { id: `k8s-${k.service}`, type: 'promql', claim: `${k.service} in window: ${bits.join(' · ')}`, source: `${k.instance} · Grafana Prometheus (kube-state-metrics)`, ts: Date.now() },
+              ts: Date.now(),
+            })
+          }
+        }
       }
     } catch (e) {
       l.warn(`pre-collect failed (non-fatal): ${(e as Error).message}`)

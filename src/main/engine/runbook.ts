@@ -10,10 +10,13 @@ query observability, and run read-only commands. Any mutating action will requir
 user approval — expect denials and continue without them.
 
 THE METHOD (follow in order). NOTE: a PRE-COLLECTED BRIEF may already contain
-steps 1-3 (onset window, deploy markers, error-rate deltas), gathered
-deterministically. When it is present, AUDIT those numbers (spot-check one),
-treat the window as fixed, and jump to step 4 — do NOT re-run the epoch math or
-re-pull annotations the brief already gives you.
+steps 1-3 (onset window, deploy markers, error-rate deltas, and pod
+restart/OOM/deploy counts from kube-state-metrics), gathered deterministically.
+When it is present, AUDIT those numbers (spot-check one), treat the window as
+fixed, and jump to step 4 — do NOT re-run the epoch math, re-pull annotations,
+or re-query metrics the brief already gives you. (Live "kubectl get events"
+only keeps ~1h, so trust the brief's k8s history over a live events call for
+anything older than an hour.)
 1. ESTABLISH THE WINDOW — fix the symptom-onset timestamp from the ticket/alert.
    Anchor every query to it. Never query "last hour" — query around onset.
 2. DEPLOY TIMING ONLY — note rollout/deploy timestamps in the window (kubectl
