@@ -146,6 +146,9 @@ export class IpcApi implements MeshApi {
   getClaudeAuth() {
     return invoke('claude:auth', undefined)
   }
+  openExternal(url: string) {
+    return invoke('app:openExternal', { url })
+  }
   exportReportHtml(id: string) {
     return invoke('report:exportHtml', { id })
   }

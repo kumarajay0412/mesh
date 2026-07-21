@@ -83,6 +83,10 @@ export interface Invokes {
    *  native dialog. Returns the path written, or null if the user cancelled. */
   'report:exportHtml': { args: { id: string }; result: { path: string | null; error?: string } }
 
+  /** Open a URL in the user's real browser. http/https only — see the
+   *  handler; shell.openExternal on an arbitrary scheme is an escape vector. */
+  'app:openExternal': { args: { url: string }; result: { ok: boolean; error?: string } }
+
   /** Is the `claude` CLI Mesh runs on signed in? */
   'claude:auth': { args: void; result: ClaudeAuth }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GrafanaInstance, SourceId } from '@shared/types'
 import { getApi } from '../../lib/api'
 import { Button, Field, Input, Modal, Pill, Toggle } from '../ui'
+import { TokenGuide } from './TokenGuide'
 
 interface SlackChannelOption {
   id: string
@@ -35,8 +36,8 @@ const FORMS: Record<SourceId, { title: string; note: string; fields: FieldSpec[]
   },
   slack: {
     title: 'Connect Slack',
-    note: 'Token with channels:history + channels:read. Paste it, then pick the channels where incidents get reported AND where RCAs/postmortems get written up — each syncs independently and its threads become searchable memory.',
-    fields: [{ key: 'token', label: 'Token', secret: true, placeholder: 'xoxp-…' }],
+    note: 'Paste a bot or user token, then pick the channels where incidents get reported AND where RCAs/postmortems get written up — each syncs independently and its threads become searchable memory.',
+    fields: [{ key: 'token', label: 'Token', secret: true, placeholder: 'xoxb-… or xoxp-…' }],
   },
   sentry: {
     title: 'Connect Sentry',
@@ -46,6 +47,20 @@ const FORMS: Record<SourceId, { title: string; note: string; fields: FieldSpec[]
       { key: 'org', label: 'Org slug', hint: 'optional', placeholder: 'your-org' },
     ],
   },
+}
+
+/** Their Grafana's service-account page, from the URL they're typing. Returns
+ *  undefined until the URL parses, so the guide shows a hint instead of a
+ *  button that would open something broken. */
+function grafanaConsoleUrl(raw?: string): string | undefined {
+  if (!raw?.trim()) return undefined
+  try {
+    const u = new URL(raw.trim())
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return undefined
+    return new URL('/org/serviceaccounts', u).toString()
+  } catch {
+    return undefined
+  }
 }
 
 /** Single-source connect dialog. Validation is a read-only call on the other
@@ -146,6 +161,14 @@ export function ConnectWizard({
       </div>
       <div className="flex flex-col gap-4 px-5 py-4">
         <p className="text-[12.5px] leading-relaxed text-muted">{spec.note}</p>
+
+        {/* Grafana's token page lives on the user's own host, so the link is
+            built from whatever they've typed rather than a fixed URL. */}
+        <TokenGuide
+          source={source}
+          url={source === 'grafana' ? grafanaConsoleUrl(values.url) : undefined}
+          defaultOpen={source === 'grafana' ? (instances?.length ?? 0) === 0 : true}
+        />
 
         {source === 'grafana' && instances && instances.length > 0 && (
           <div className="flex flex-col gap-1.5">

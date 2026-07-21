@@ -1,5 +1,5 @@
 // Registers every Invokes handler — the typed seam between renderer and main.
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { expandHome, scanGitRepos } from '../repos/workspace'
 import type { Database } from 'better-sqlite3'
@@ -254,6 +254,24 @@ export function registerIpc(deps: RegisterDeps): void {
     if (picked.canceled || !picked.filePath) return { path: null }
     await writeFile(picked.filePath, renderReportHtml(withCost, inv.report, Date.now()), 'utf8')
     return { path: picked.filePath }
+  })
+
+  // Only ever called with the hardcoded provider URLs in token-guides.ts (and
+  // the user's own Grafana host), but validate anyway: openExternal hands the
+  // string to the OS, so a non-http scheme can launch a handler rather than a
+  // browser. Deny by default, same posture as the rest of the app.
+  handle('app:openExternal', async ({ url }) => {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return { ok: false, error: 'not a URL' }
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return { ok: false, error: `refused to open ${parsed.protocol} — only http(s)` }
+    }
+    await shell.openExternal(parsed.toString())
+    return { ok: true }
   })
 
   handle('claude:auth', () => claudeAuth())

@@ -746,6 +746,11 @@ export class MockApi implements MeshApi {
     }
   }
 
+  async openExternal(url: string) {
+    window.open(url, '_blank', 'noopener')
+    return { ok: true }
+  }
+
   async exportReportHtml() {
     return { path: null, error: 'export is only available in the Mesh desktop app' }
   }

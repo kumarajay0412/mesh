@@ -88,6 +88,8 @@ export interface MeshApi {
   getContextSummary(): Promise<ContextSummary>
   getK8sStatus(): Promise<K8sStatus>
   getClaudeAuth(): Promise<ClaudeAuth>
+  /** open a URL in the real browser (http/https only, enforced in main) */
+  openExternal(url: string): Promise<{ ok: boolean; error?: string }>
   /** save the report as a self-contained HTML file; null path = cancelled */
   exportReportHtml(id: string): Promise<{ path: string | null; error?: string }>
 
