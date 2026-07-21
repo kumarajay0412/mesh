@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Button } from '../ui'
 
 /** The report's two outward actions — both are Section 10-gated writes and always
@@ -5,12 +6,36 @@ import { Button } from '../ui'
 export function ReportActions({
   onPostToLinear,
   onOpenFixSession,
+  onDownload,
 }: {
   onPostToLinear: () => void
   onOpenFixSession: () => void
+  /** local file write — no approval gate; nothing leaves the machine */
+  onDownload?: () => Promise<string | null>
 }) {
+  const [saved, setSaved] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   return (
     <div className="flex items-center gap-2">
+      {onDownload && (
+        <span title={saved ? `Saved to ${saved}` : 'Save a self-contained HTML report (charts included, opens offline)'}>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            void onDownload()
+              .then((p) => setSaved(p))
+              .finally(() => setBusy(false))
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          {busy ? 'Saving…' : saved ? 'Saved' : 'Download report'}
+        </Button>
+        </span>
+      )}
       <Button variant="ghost" onClick={onPostToLinear}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />

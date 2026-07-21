@@ -19,3 +19,19 @@ export function clockTime(ts: number): string {
 export function shortSha(sha: string): string {
   return sha.slice(0, 7)
 }
+
+/** API spend, rendered for a badge. Sub-cent runs still deserve a figure —
+ *  "$0.00" reads as free, which it isn't — so anything above zero shows at
+ *  least two significant places. */
+export function formatUsd(usd: number): string {
+  if (usd >= 1) return `$${usd.toFixed(2)}`
+  if (usd >= 0.01) return `$${usd.toFixed(2)}`
+  return usd > 0 ? '<$0.01' : '$0.00'
+}
+
+/** 7048495 → "7.0M". Token counts are only ever read for magnitude. */
+export function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}

@@ -188,6 +188,7 @@ const INVESTIGATIONS: Investigation[] = [
     source: 'sentry',
     ticketRef: 'ENG-1284',
     createdAt: now - 4 * min,
+    cost: { usd: 3.09, inputTokens: 24651, cacheWriteTokens: 142527, cacheReadTokens: 1361089, outputTokens: 34573, turns: 31, partial: false },
     similarTo: [{ id: 'INV-042', note: 'timeout regression in settle client' }],
   },
   {
@@ -198,6 +199,7 @@ const INVESTIGATIONS: Investigation[] = [
     stage: 'report',
     confidence: 'confirmed',
     source: 'grafana',
+    cost: { usd: 4.35, inputTokens: 1858, cacheWriteTokens: 232858, cacheReadTokens: 7048495, outputTokens: 55815, turns: 79, partial: false },
     createdAt: now - 130 * min,
     report: REPORT_050,
   },
@@ -742,6 +744,10 @@ export class MockApi implements MeshApi {
       ],
       unmappedServices: ['search-api', 'auth-gateway'],
     }
+  }
+
+  async exportReportHtml() {
+    return { path: null, error: 'export is only available in the Mesh desktop app' }
   }
 
   async getClaudeAuth() {

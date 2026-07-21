@@ -51,6 +51,35 @@ export interface Investigation {
   closedAt?: number
   similarTo?: { id: string; note: string }[]
   report?: Report
+  /** API spend for this investigation, summed across its provider sessions.
+   *  Reported by the SDK (`total_cost_usd`) rather than computed from a price
+   *  table, so it stays correct as model pricing changes. */
+  cost?: InvestigationCost
+}
+
+/** What an investigation actually cost. Tokens are kept alongside the dollar
+ *  figure because the split is the interesting part: cache reads bill at ~0.1x,
+ *  so a large `cacheReadTokens` is the prompt-cache boundary paying for itself. */
+export interface InvestigationCost {
+  usd: number | null
+  inputTokens: number
+  cacheWriteTokens: number
+  cacheReadTokens: number
+  outputTokens: number
+  turns: number
+  /** sessions that predate token accounting contribute tokens but no usd */
+  partial: boolean
+}
+
+/** An image the user attached to an investigation turn. Stored on disk under
+ *  userData; the agent receives it as a base64 image content block. */
+export interface Attachment {
+  id: string
+  /** image/png, image/jpeg, image/gif, image/webp */
+  mediaType: string
+  /** original filename, when the user dropped a file rather than pasting */
+  name?: string
+  bytes: number
 }
 
 export interface SuspectCommit {

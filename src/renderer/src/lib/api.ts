@@ -88,6 +88,8 @@ export interface MeshApi {
   getContextSummary(): Promise<ContextSummary>
   getK8sStatus(): Promise<K8sStatus>
   getClaudeAuth(): Promise<ClaudeAuth>
+  /** save the report as a self-contained HTML file; null path = cancelled */
+  exportReportHtml(id: string): Promise<{ path: string | null; error?: string }>
 
   // embedded terminal (user-driven only — never exposed to the agent)
   ptySpawn(req: PtySpawnRequest): Promise<{ id: string } | { error: string }>

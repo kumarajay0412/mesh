@@ -4,7 +4,7 @@ import { useApp } from '../stores/app'
 import { useInvestigations } from '../stores/investigations'
 import { ScreenHeader } from '../components/layout/ScreenHeader'
 import { Button, ConfidenceBadge, Dot, EmptyState, Field, Input, Modal, Pill, StagePips, Tabs, TextArea } from '../components/ui'
-import { timeAgo } from '../lib/format'
+import { formatUsd, timeAgo } from '../lib/format'
 
 const STATUS_TONE: Record<InvestigationStatus, 'neutral' | 'gold' | 'info' | 'ok' | 'danger'> = {
   open: 'neutral',
@@ -109,6 +109,15 @@ function Row({ inv }: { inv: Investigation }) {
           <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-gold-400">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 3v18M3 12h18" /></svg>
             similar to {inv.similarTo[0].id}
+          </span>
+        )}
+        {inv.cost?.usd != null && (
+          <span
+            className="font-mono text-[11px] text-subtle"
+            title={`API spend across ${inv.cost.turns} turn(s)${inv.cost.partial ? ' — some sessions predate cost tracking, so this is a floor' : ''}`}
+          >
+            {inv.cost.partial ? '≥' : ''}
+            {formatUsd(inv.cost.usd)}
           </span>
         )}
         {inv.confidence && <ConfidenceBadge value={inv.confidence} />}

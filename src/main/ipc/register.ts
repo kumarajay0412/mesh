@@ -1,5 +1,6 @@
 // Registers every Invokes handler — the typed seam between renderer and main.
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { expandHome, scanGitRepos } from '../repos/workspace'
 import type { Database } from 'better-sqlite3'
 import type { Invokes, MainEvents } from '../../shared/ipc'
@@ -8,12 +9,14 @@ import { learningsRepo } from '../db/repos/learnings'
 import { discoverServices } from '../registry/discovery'
 import { k8sStatus } from '../registry/k8s-status'
 import { claudeAuth } from '../providers/claude-auth'
+import { renderReportHtml } from '../engine/report-html'
 import { createPtyHost } from '../terminal/pty'
 import { mapRepo } from '../db/repos/map'
 import { investigationsRepo } from '../db/repos/investigations'
 import { eventsRepo } from '../db/repos/events'
 import { servicesRepo } from '../db/repos/services'
 import { syncStateRepo } from '../db/repos/syncState'
+import { sessionsRepo } from '../db/repos/sessions'
 import { settingsRepo } from '../db/repos/settings'
 import { memoryRepo } from '../db/repos/memory'
 import type { SecretStore } from '../security/secrets'
@@ -69,8 +72,18 @@ export function registerIpc(deps: RegisterDeps): void {
   const settings = settingsRepo(db)
 
   // db
-  handle('db:investigations:list', () => invs.list())
-  handle('db:investigations:get', ({ id }) => invs.get(id))
+  // Cost rides along with the investigation so the list can show spend without
+  // a second round trip. Summed from the session ledger, which records the
+  // SDK's own total_cost_usd — never a local price table.
+  const sessions = sessionsRepo(db)
+  handle('db:investigations:list', () => {
+    const cost = sessions.costByInvestigation()
+    return invs.list().map((i) => ({ ...i, cost: cost.get(i.id) }))
+  })
+  handle('db:investigations:get', ({ id }) => {
+    const i = invs.get(id)
+    return i ? { ...i, cost: sessions.costByInvestigation().get(id) } : null
+  })
   handle('db:events:timeline', ({ id }) => events.timeline(id))
 
   // engine
@@ -226,6 +239,22 @@ export function registerIpc(deps: RegisterDeps): void {
   // Connections → Kubernetes: probes local gcloud/az/kubectl and maps the
   // registry onto kubectl contexts. Read-only; no cloud creds are stored.
   handle('k8s:status', () => k8sStatus(db))
+
+  handle('report:exportHtml', async ({ id }) => {
+    const inv = invs.get(id)
+    if (!inv?.report) return { path: null, error: 'no report on this investigation yet' }
+    const withCost = { ...inv, cost: sessions.costByInvestigation().get(id) }
+    const w = deps.win()
+    const safe = `${id}-${inv.title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80)
+    const picked = await dialog.showSaveDialog(w ?? undefined!, {
+      title: 'Export incident report',
+      defaultPath: `${safe}.html`,
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    })
+    if (picked.canceled || !picked.filePath) return { path: null }
+    await writeFile(picked.filePath, renderReportHtml(withCost, inv.report, Date.now()), 'utf8')
+    return { path: picked.filePath }
+  })
 
   handle('claude:auth', () => claudeAuth())
 

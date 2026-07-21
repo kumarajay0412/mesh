@@ -146,6 +146,9 @@ export class IpcApi implements MeshApi {
   getClaudeAuth() {
     return invoke('claude:auth', undefined)
   }
+  exportReportHtml(id: string) {
+    return invoke('report:exportHtml', { id })
+  }
 
   ptySpawn(req: import('@shared/types').PtySpawnRequest) {
     return invoke('pty:spawn', req)

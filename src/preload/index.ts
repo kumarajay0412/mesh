@@ -32,6 +32,7 @@ const INVOKE_CHANNELS: InvokeChannel[] = [
   'context:summary',
   'k8s:status',
   'claude:auth',
+  'report:exportHtml',
   'pty:spawn',
   'pty:write',
   'pty:resize',

@@ -37,6 +37,11 @@ export function Report() {
             <ReportActions
               onPostToLinear={() => id && void getApi().then((a) => a.postReportToLinear(id))}
               onOpenFixSession={() => id && void getApi().then((a) => a.openFixSession(id))}
+              onDownload={async () => {
+                if (!id) return null
+                const r = await (await getApi()).exportReportHtml(id)
+                return r.path
+              }}
             />
           )
         }

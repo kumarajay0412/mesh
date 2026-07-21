@@ -79,6 +79,10 @@ export interface Invokes {
   /** Connections → Kubernetes: local tooling detection + context/service map. */
   'k8s:status': { args: void; result: K8sStatus }
 
+  /** Render the report as a self-contained HTML file and save it via the
+   *  native dialog. Returns the path written, or null if the user cancelled. */
+  'report:exportHtml': { args: { id: string }; result: { path: string | null; error?: string } }
+
   /** Is the `claude` CLI Mesh runs on signed in? */
   'claude:auth': { args: void; result: ClaudeAuth }
 
