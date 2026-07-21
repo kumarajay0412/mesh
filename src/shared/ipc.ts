@@ -3,6 +3,7 @@
 import type {
   AgentEvent,
   ContextSummary,
+  K8sStatus,
   ApprovalOutcome,
   ConnectionInfo,
   GrafanaInstance,
@@ -72,6 +73,8 @@ export interface Invokes {
   /** The "What Mesh knows" transparency panel: totals for every inferred
    *  store + the exact map/learning text that rides in prompts. */
   'context:summary': { args: void; result: ContextSummary }
+  /** Connections → Kubernetes: local tooling detection + context/service map. */
+  'k8s:status': { args: void; result: K8sStatus }
 
   'learnings:list': { args: { status?: Learning['status'] }; result: Learning[] }
   'learnings:decide': { args: { id: number; accept: boolean }; result: void }

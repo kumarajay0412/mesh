@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   ContextSummary,
+  K8sStatus,
   ApprovalRequest,
   ConnectionInfo,
   GrafanaInstance,
@@ -82,6 +83,7 @@ export interface MeshApi {
   decideMapEdge(id: number, accept: boolean): Promise<void>
   seedMapFromText(text: string): Promise<{ ok: true; nodes: number; edges: number } | { ok: false; message: string }>
   getContextSummary(): Promise<ContextSummary>
+  getK8sStatus(): Promise<K8sStatus>
 
   // approvals
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void

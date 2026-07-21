@@ -719,6 +719,17 @@ export class MockApi implements MeshApi {
     }
   }
 
+  async getK8sStatus() {
+    return {
+      kubectl: true,
+      gcloud: true,
+      az: false,
+      contexts: ['gke-prod', 'gke-staging', 'aks-dictation'],
+      mapped: [{ service: 'payments-api', context: 'gke-prod', namespace: 'prod' }],
+      unmappedServices: ['search-api', 'auth-gateway'],
+    }
+  }
+
   async seedMapFromText(text: string) {
     if (!text.trim()) return { ok: false as const, message: 'paste a description first' }
     // simulate an extraction: two nodes + one edge appear on the map

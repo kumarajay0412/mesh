@@ -6,6 +6,7 @@ import type { Invokes, MainEvents } from '../../shared/ipc'
 import type { ConnectionInfo, GrafanaInstance, SourceId } from '../../shared/types'
 import { learningsRepo } from '../db/repos/learnings'
 import { discoverServices } from '../registry/discovery'
+import { k8sStatus } from '../registry/k8s-status'
 import { mapRepo } from '../db/repos/map'
 import { investigationsRepo } from '../db/repos/investigations'
 import { eventsRepo } from '../db/repos/events'
@@ -215,6 +216,10 @@ export function registerIpc(deps: RegisterDeps): void {
     for (const e of extraction.edges) map.addEdge(e.from, e.to, e.label, e.kind)
     return { ok: true as const, nodes: extraction.nodes.length, edges: extraction.edges.length }
   })
+
+  // Connections → Kubernetes: probes local gcloud/az/kubectl and maps the
+  // registry onto kubectl contexts. Read-only; no cloud creds are stored.
+  handle('k8s:status', () => k8sStatus(db))
 
   // "What Mesh knows" — totals for every inferred store, plus the exact
   // text that rides in prompts. Read-only aggregation; nothing cached.

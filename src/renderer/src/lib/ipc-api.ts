@@ -140,6 +140,9 @@ export class IpcApi implements MeshApi {
   getContextSummary() {
     return invoke('context:summary', undefined)
   }
+  getK8sStatus() {
+    return invoke('k8s:status', undefined)
+  }
 
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void {
     return on('approval:request', cb)

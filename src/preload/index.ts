@@ -30,6 +30,7 @@ const INVOKE_CHANNELS: InvokeChannel[] = [
   'slack:listChannels',
   'map:seedFromText',
   'context:summary',
+  'k8s:status',
   'learnings:list',
   'learnings:decide',
   'map:get',

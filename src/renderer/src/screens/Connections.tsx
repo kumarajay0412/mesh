@@ -3,6 +3,7 @@ import { useConnections } from '../stores/connections'
 import { ScreenHeader } from '../components/layout/ScreenHeader'
 import { ConnectionCard } from '../components/connections/ConnectionCard'
 import { ConnectWizard } from '../components/connections/ConnectWizard'
+import { KubernetesCard } from '../components/connections/KubernetesCard'
 
 export function Connections() {
   const { list, load, wizardOpen, openWizard, connect } = useConnections()
@@ -23,6 +24,11 @@ export function Connections() {
         {list.map((c) => (
           <ConnectionCard key={c.id} conn={c} onManage={() => openWizard(c.id)} />
         ))}
+      </div>
+
+      <div className="mt-6">
+        <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-subtle">Clusters (read-only · your own login)</div>
+        <KubernetesCard />
       </div>
 
       {wizardOpen && (

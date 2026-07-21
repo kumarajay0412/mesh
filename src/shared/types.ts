@@ -294,6 +294,19 @@ export interface IntakeInput {
   pasted?: string
 }
 
+/** Local Kubernetes tooling + cluster wiring status — the Connections →
+ *  Kubernetes card. Mesh stores no cloud creds; it reads what your machine
+ *  already has (gcloud/az/kubectl on your own login). */
+export interface K8sStatus {
+  kubectl: boolean
+  gcloud: boolean
+  az: boolean
+  contexts: string[] // kubectl config context names
+  /** registry services that already route to a context, and orphans/unmapped */
+  mapped: { service: string; context: string; namespace?: string }[]
+  unmappedServices: string[] // candidate services with no k8s_context yet
+}
+
 /** Everything Mesh has inferred so far — the transparency view behind the
  *  Knowledge Map's "What Mesh knows" panel. */
 export interface ContextSummary {
