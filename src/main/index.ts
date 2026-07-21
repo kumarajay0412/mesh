@@ -11,10 +11,11 @@ import { getProvider } from './providers'
 import { settingsRepo } from './db/repos/settings'
 import { eventsRepo } from './db/repos/events'
 import { syncStateRepo } from './db/repos/syncState'
-import { registerIpc, makeEmit } from './ipc/register'
+import { registerIpc, makeEmit, getPtyHost } from './ipc/register'
 import { runSync, knownSources, type SyncDeps } from './sync'
 import { startScheduler } from './sync/scheduler'
 import { setDockIcon } from './dock-icon'
+import { applyStaticPathExtras, resolveShellPath } from './shell-path'
 import { discoverServices } from './registry/discovery'
 import { servicesRepo } from './db/repos/services'
 import { log } from './log'
@@ -48,12 +49,12 @@ app.on('second-instance', () => {
 })
 
 // Finder-launched apps inherit a bare PATH (/usr/bin:/bin) — the spawns that
-// power repo sync (gh, git), Codex, and npx-based MCP servers would silently
-// vanish in the packaged app. Augment with the usual install locations.
-if (process.platform === 'darwin') {
-  const extras = ['/opt/homebrew/bin', '/usr/local/bin', join(process.env.HOME ?? '', '.local/bin')]
-  process.env.PATH = [...new Set([...(process.env.PATH ?? '').split(':'), ...extras])].filter(Boolean).join(':')
-}
+// power repo sync (gh, git), Codex, npx-based MCP servers and the cluster CLIs
+// would silently vanish in the packaged app. Apply the static extras now (some
+// spawns happen before app-ready) and widen to the login shell's PATH in
+// whenReady, so tools in less-guessable places (~/google-cloud-sdk/bin, nvm,
+// asdf) are found too — otherwise Mesh reports them as "not installed".
+applyStaticPathExtras()
 
 let win: BrowserWindow | null = null
 
@@ -77,6 +78,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Widen PATH to the login shell's before anything probes for CLIs. Fire and
+  // forget: the static extras already applied cover the common cases, so no
+  // startup latency is spent waiting on a user's slow shell rc.
+  void resolveShellPath()
+
   // — data layer
   const dbPath = join(app.getPath('userData'), 'mesh.db')
   const { handle: db, vecAvailable } = openDb(dbPath)
@@ -159,6 +165,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     approvals.denyAll('window-closed')
     engine.shutdown()
+    getPtyHost()?.disposeAll() // don't leave orphaned login shells behind
     stopScheduler()
     embeddings.stop()
   })

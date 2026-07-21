@@ -720,14 +720,131 @@ export class MockApi implements MeshApi {
   }
 
   async getK8sStatus() {
+    // Mirrors a realistic machine: gcloud logged in but token lapsed, az fine.
+    // GKE contexts delegate auth to the gcloud plugin (so they're blocked);
+    // the AKS context carries embedded creds and keeps working.
     return {
       kubectl: true,
       gcloud: true,
-      az: false,
-      contexts: ['gke-prod', 'gke-staging', 'aks-dictation'],
-      mapped: [{ service: 'payments-api', context: 'gke-prod', namespace: 'prod' }],
+      az: true,
+      gcloudAuth: 'stale' as const,
+      azAuth: 'ok' as const,
+      contexts: [
+        { name: 'gke-prod', provider: 'gcp' as const, needsCliLogin: true, execBin: 'gke-gcloud-auth-plugin' },
+        { name: 'gke-staging', provider: 'gcp' as const, needsCliLogin: true, execBin: 'gke-gcloud-auth-plugin' },
+        { name: 'aks-dictation', provider: 'azure' as const, needsCliLogin: false },
+      ],
+      contextsDegraded: false,
+      mapped: [
+        { service: 'payments-api', context: 'gke-prod', namespace: 'prod', contextExists: true },
+        // a stale mapping left behind after a cluster rename — must be flagged
+        { service: 'billing-worker', context: 'gke-old-prod', namespace: 'prod', contextExists: false },
+      ],
       unmappedServices: ['search-api', 'auth-gateway'],
     }
+  }
+
+  async getClaudeAuth() {
+    return { installed: true, loggedIn: false as boolean, authMethod: 'claude.ai', subscriptionType: 'max' }
+  }
+
+  // Browser dev has no real PTY, so simulate one well enough that the terminal
+  // renders and can be designed against: a prompt, echoed keystrokes, and a
+  // couple of canned command responses.
+  private ptyListeners = new Set<(p: { id: string; chunk: string }) => void>()
+  private ptyLine = ''
+  private ptyBuf = ''
+
+  private ptyPrompt = '\x1b[38;5;179majay\x1b[0m@\x1b[38;5;109mmesh\x1b[0m \x1b[38;5;245m~\x1b[0m %\u0020'
+
+  private ptyEmit(chunk: string) {
+    this.ptyBuf += chunk
+    for (const cb of this.ptyListeners) cb({ id: 'mock-pty', chunk })
+  }
+
+  async ptySpawn(req: { command?: string }) {
+    this.ptyBuf = ''
+    setTimeout(() => {
+      this.ptyEmit('Last login: today on ttys004\r\n')
+      this.ptyEmit(this.ptyPrompt)
+      // Browser dev only: replay a short realistic session so the terminal can
+      // be designed against actual output rather than a bare prompt.
+      if (req?.command) {
+        setTimeout(() => this.ptyRun(req.command as string), 300)
+      } else {
+        setTimeout(() => this.ptyRun('kubectl config get-contexts -o name'), 220)
+        setTimeout(() => this.ptyRun('ls'), 520)
+        setTimeout(() => this.ptyRun('kubectl rollout status deploy/payments-api'), 820)
+      }
+    }, 60)
+    return { id: 'mock-pty' }
+  }
+
+  private ptyRun(cmd: string) {
+    this.ptyEmit(cmd + '\r\n')
+    const c = cmd.trim()
+    if (c.startsWith('gcloud auth login')) {
+      this.ptyEmit('Your browser has been opened to visit:\r\n\r\n')
+      this.ptyEmit('    \x1b[4mhttps://accounts.google.com/o/oauth2/auth?...\x1b[0m\r\n\r\n')
+      setTimeout(() => {
+        this.ptyEmit('\x1b[32m✓\x1b[0m You are now logged in as [ajay@adalat.ai].\r\n')
+        this.ptyEmit(this.ptyPrompt)
+      }, 900)
+      return
+    }
+    if (c.startsWith('claude auth login')) {
+      this.ptyEmit('Opening browser to sign in…\r\n')
+      setTimeout(() => {
+        this.ptyEmit('\x1b[32m✓\x1b[0m Signed in as ajay@adalat.ai (max)\r\n')
+        this.ptyEmit(this.ptyPrompt)
+      }, 900)
+      return
+    }
+    if (c === 'kubectl config get-contexts -o name') {
+      this.ptyEmit('adalatAI-staging-dictation-aks\r\naks-dictation\r\ngke-alpha\r\ngke-gpu\r\ngke-prod\r\n')
+    } else if (c.startsWith('kubectl rollout status')) {
+      this.ptyEmit('Waiting for deployment "payments-api" rollout to finish: 2 of 3 updated…\r\n')
+      this.ptyEmit('\x1b[33mwarning:\x1b[0m 1 pod restarted (OOMKilled) in the last 5m\r\n')
+      this.ptyEmit('deployment "payments-api" successfully rolled out\r\n')
+    } else if (c === 'ls') {
+      this.ptyEmit('\x1b[38;5;109mdist\x1b[0m  \x1b[38;5;109mnode_modules\x1b[0m  \x1b[38;5;109msrc\x1b[0m  package.json  README.md\r\n')
+    } else if (c.length) {
+      this.ptyEmit(`zsh: command not found: ${c.split(' ')[0]}\r\n`)
+    }
+    this.ptyEmit(this.ptyPrompt)
+  }
+
+  async ptyWrite(_id: string, data: string) {
+    for (const ch of data) {
+      if (ch === '\r' || ch === '\n') {
+        const line = this.ptyLine
+        this.ptyLine = ''
+        this.ptyEmit('\r\n')
+        this.ptyRun(line)
+      } else if (ch === '\u007f') {
+        if (this.ptyLine) {
+          this.ptyLine = this.ptyLine.slice(0, -1)
+          this.ptyEmit('\b \b')
+        }
+      } else if (ch >= ' ') {
+        this.ptyLine += ch
+        this.ptyEmit(ch)
+      }
+    }
+  }
+  async ptyResize() {}
+  async ptyKill() {
+    this.ptyListeners.clear()
+  }
+  async ptyScrollback() {
+    return this.ptyBuf
+  }
+  onPtyData(cb: (p: { id: string; chunk: string }) => void) {
+    this.ptyListeners.add(cb)
+    return () => this.ptyListeners.delete(cb)
+  }
+  onPtyExit() {
+    return () => {}
   }
 
   async seedMapFromText(text: string) {

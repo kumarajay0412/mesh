@@ -3,7 +3,10 @@
 import type {
   AgentEvent,
   ContextSummary,
+  ClaudeAuth,
   K8sStatus,
+  PtyExit,
+  PtySpawnRequest,
   ApprovalOutcome,
   ConnectionInfo,
   GrafanaInstance,
@@ -76,6 +79,17 @@ export interface Invokes {
   /** Connections → Kubernetes: local tooling detection + context/service map. */
   'k8s:status': { args: void; result: K8sStatus }
 
+  /** Is the `claude` CLI Mesh runs on signed in? */
+  'claude:auth': { args: void; result: ClaudeAuth }
+
+  // Embedded terminal. USER-DRIVEN ONLY — see src/main/terminal/pty.ts for why
+  // the agent must never reach these.
+  'pty:spawn': { args: PtySpawnRequest; result: { id: string } | { error: string } }
+  'pty:write': { args: { id: string; data: string }; result: void }
+  'pty:resize': { args: { id: string; cols: number; rows: number }; result: void }
+  'pty:kill': { args: { id: string }; result: void }
+  'pty:scrollback': { args: { id: string }; result: string }
+
   'learnings:list': { args: { status?: Learning['status'] }; result: Learning[] }
   'learnings:decide': { args: { id: number; accept: boolean }; result: void }
 
@@ -101,6 +115,8 @@ export interface MainEvents {
   'approval:request': ApprovalRequest
   'approval:resolved': { id: string; outcome: ApprovalOutcome }
   'model:status': ModelStatus
+  'pty:data': { id: string; chunk: string }
+  'pty:exit': PtyExit
 }
 
 export type InvokeChannel = keyof Invokes

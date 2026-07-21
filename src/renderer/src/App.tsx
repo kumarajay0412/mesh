@@ -3,6 +3,9 @@ import { TitleBar } from './components/layout/TitleBar'
 import { Sidebar } from './components/layout/Sidebar'
 import { ApprovalModal } from './components/approval/ApprovalModal'
 import { Tour } from './components/onboarding/Tour'
+import { TerminalDrawer } from './components/terminal/TerminalDrawer'
+import { ClaudeLoginGate } from './components/terminal/ClaudeLoginGate'
+import { wireTerminalEvents, useTerminal } from './stores/terminal'
 import { useApp } from './stores/app'
 import { useSettings } from './stores/settings'
 import { Investigations } from './screens/Investigations'
@@ -20,7 +23,22 @@ export default function App() {
 
   useEffect(() => {
     void load() // settings drive the theme, so load them at boot
+    void wireTerminalEvents() // pty exit stream → re-check auth after a login
   }, [load])
+
+  // ⌘J toggles the terminal, the way an editor would.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        const t = useTerminal.getState()
+        if (t.open) void t.close()
+        else void t.launch({ title: 'Terminal' })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-ada-theme', settings?.theme ?? 'dark')
@@ -44,6 +62,9 @@ export default function App() {
       </div>
       {/* Section 10: the per-action gate lives above everything, always mounted */}
       <ApprovalModal />
+      {/* embedded terminal — user-driven only; the agent has no route to it */}
+      <TerminalDrawer />
+      <ClaudeLoginGate />
       {/* onboarding: auto-opens on first run; the sidebar Tutorial button reopens it */}
       <Tour />
     </div>

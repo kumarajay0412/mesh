@@ -294,6 +294,61 @@ export interface IntakeInput {
   pasted?: string
 }
 
+/** Whether the Claude CLI this app runs on is signed in. Mesh uses the user's
+ *  own `claude` login rather than holding an API key, so a logged-out CLI means
+ *  no investigation can start — worth catching before they try. */
+export interface ClaudeAuth {
+  /** false when the `claude` binary isn't on PATH at all */
+  installed: boolean
+  loggedIn: boolean
+  email?: string
+  authMethod?: string
+  subscriptionType?: string
+  /** why we couldn't tell, when we couldn't */
+  error?: string
+}
+
+/** Request to open a terminal session. `command` runs one command and keeps the
+ *  shell open; omitting it gives a plain interactive login shell. */
+export interface PtySpawnRequest {
+  command?: string
+  cwd?: string
+  shell?: string
+  cols?: number
+  rows?: number
+}
+
+export interface PtyExit {
+  id: string
+  exitCode: number
+  signal?: number
+}
+
+/** Provider CLI login state.
+ *  - `absent`  the binary isn't installed
+ *  - `none`    installed, but no account has ever been logged in
+ *  - `stale`   an account exists but its token no longer refreshes (re-login)
+ *  - `ok`      a token was minted just now
+ *  - `unknown` the probe failed for a reason that isn't an auth problem
+ *              (offline, timeout) — never nag the user on this one */
+export type CliAuth = 'absent' | 'none' | 'stale' | 'ok' | 'unknown'
+
+/** A kubectl context plus how it proves identity. Contexts that delegate to a
+ *  provider CLI (GKE's gke-gcloud-auth-plugin, AKS's kubelogin) break the
+ *  moment that CLI's login goes stale; contexts carrying embedded credentials
+ *  keep working regardless, so they must not be flagged for a CLI re-login. */
+export interface K8sContext {
+  name: string
+  provider: 'gcp' | 'azure' | 'other'
+  /** true when reads through this context depend on `gcloud`/`az` being logged in */
+  needsCliLogin: boolean
+  /** the exec credential plugin this context shells out to, if any */
+  execBin?: string
+  /** true when that plugin isn't resolvable on PATH — reads fail with
+   *  "executable … not found" even though the CLI login itself is fine */
+  execBinMissing?: boolean
+}
+
 /** Local Kubernetes tooling + cluster wiring status — the Connections →
  *  Kubernetes card. Mesh stores no cloud creds; it reads what your machine
  *  already has (gcloud/az/kubectl on your own login). */
@@ -301,9 +356,17 @@ export interface K8sStatus {
   kubectl: boolean
   gcloud: boolean
   az: boolean
-  contexts: string[] // kubectl config context names
-  /** registry services that already route to a context, and orphans/unmapped */
-  mapped: { service: string; context: string; namespace?: string }[]
+  /** login state of each provider CLI — drives the "run gcloud auth login" hint */
+  gcloudAuth: CliAuth
+  azAuth: CliAuth
+  contexts: K8sContext[]
+  /** true when the kubeconfig couldn't be enumerated/parsed. Suppresses any
+   *  "this context doesn't exist" claim, which would otherwise be a false alarm. */
+  contextsDegraded: boolean
+  /** registry services that already route to a context. `contextExists` is
+   *  false when the mapping points at a context the kubeconfig doesn't have —
+   *  a silently broken wiring, since live reads fail with "no context exists". */
+  mapped: { service: string; context: string; namespace?: string; contextExists: boolean }[]
   unmappedServices: string[] // candidate services with no k8s_context yet
 }
 

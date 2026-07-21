@@ -1,7 +1,10 @@
 import type {
   AgentEvent,
   ContextSummary,
+  ClaudeAuth,
   K8sStatus,
+  PtyExit,
+  PtySpawnRequest,
   ApprovalRequest,
   ConnectionInfo,
   GrafanaInstance,
@@ -84,6 +87,16 @@ export interface MeshApi {
   seedMapFromText(text: string): Promise<{ ok: true; nodes: number; edges: number } | { ok: false; message: string }>
   getContextSummary(): Promise<ContextSummary>
   getK8sStatus(): Promise<K8sStatus>
+  getClaudeAuth(): Promise<ClaudeAuth>
+
+  // embedded terminal (user-driven only — never exposed to the agent)
+  ptySpawn(req: PtySpawnRequest): Promise<{ id: string } | { error: string }>
+  ptyWrite(id: string, data: string): Promise<void>
+  ptyResize(id: string, cols: number, rows: number): Promise<void>
+  ptyKill(id: string): Promise<void>
+  ptyScrollback(id: string): Promise<string>
+  onPtyData(cb: (p: { id: string; chunk: string }) => void): () => void
+  onPtyExit(cb: (p: PtyExit) => void): () => void
 
   // approvals
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void

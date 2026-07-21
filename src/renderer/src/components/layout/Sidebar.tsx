@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useEffect } from 'react'
 import { useApp, type ScreenId } from '../../stores/app'
 import { useMemory } from '../../stores/memory'
+import { useTerminal } from '../../stores/terminal'
 import { timeAgo } from '../../lib/format'
 import { Dot } from '../ui'
 import { MeshMark } from '../ui/MeshMark'
@@ -77,6 +78,15 @@ export function Sidebar() {
       </div>
 
       <div className="flex-1" />
+
+      <button
+        onClick={() => void useTerminal.getState().launch({ title: 'Terminal' })}
+        className="no-drag mx-2.5 mb-1 flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] text-subtle transition-colors duration-100 hover:bg-ink-800 hover:text-muted"
+        title="Open a shell inside Mesh (⌘J)"
+      >
+        {I('M4 17l6-5-6-5', 'M12 19h8')}
+        <span className="font-medium">Terminal</span>
+      </button>
 
       <button
         onClick={() => useApp.getState().setTour(true)}

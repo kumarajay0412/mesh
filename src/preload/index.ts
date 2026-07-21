@@ -31,6 +31,12 @@ const INVOKE_CHANNELS: InvokeChannel[] = [
   'map:seedFromText',
   'context:summary',
   'k8s:status',
+  'claude:auth',
+  'pty:spawn',
+  'pty:write',
+  'pty:resize',
+  'pty:kill',
+  'pty:scrollback',
   'learnings:list',
   'learnings:decide',
   'map:get',
@@ -51,6 +57,8 @@ const EVENT_CHANNELS: EventChannel[] = [
   'approval:request',
   'approval:resolved',
   'model:status',
+  'pty:data',
+  'pty:exit',
 ]
 
 contextBridge.exposeInMainWorld('mesh', {

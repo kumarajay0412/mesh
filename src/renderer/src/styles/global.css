@@ -38,3 +38,26 @@ body {
 @keyframes meshSpin { to { transform: rotate(360deg) } }
 
 ::selection { background: rgba(245, 197, 24, 0.28); }
+
+/* Embedded terminal (xterm). xterm owns its subtree, so breathing room and
+   scrollbar styling have to be applied to its own elements rather than to a
+   React wrapper — padding on the parent would be covered by the viewport. */
+.mesh-term .xterm {
+  height: 100%;
+  padding: 10px 12px;
+}
+.mesh-term .xterm-viewport {
+  background-color: transparent !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ada-ink-600) transparent;
+}
+.mesh-term .xterm-viewport::-webkit-scrollbar { width: 8px; }
+.mesh-term .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--ada-ink-600);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+/* Dim the cursor while the terminal doesn't have focus, so it's obvious where
+   keystrokes will land when several panes are on screen. */
+.mesh-term .xterm:not(.focus) .xterm-cursor-bar { opacity: 0.35; }

@@ -143,6 +143,31 @@ export class IpcApi implements MeshApi {
   getK8sStatus() {
     return invoke('k8s:status', undefined)
   }
+  getClaudeAuth() {
+    return invoke('claude:auth', undefined)
+  }
+
+  ptySpawn(req: import('@shared/types').PtySpawnRequest) {
+    return invoke('pty:spawn', req)
+  }
+  ptyWrite(id: string, data: string) {
+    return invoke('pty:write', { id, data })
+  }
+  ptyResize(id: string, cols: number, rows: number) {
+    return invoke('pty:resize', { id, cols, rows })
+  }
+  ptyKill(id: string) {
+    return invoke('pty:kill', { id })
+  }
+  ptyScrollback(id: string) {
+    return invoke('pty:scrollback', { id })
+  }
+  onPtyData(cb: (p: { id: string; chunk: string }) => void) {
+    return on('pty:data', cb)
+  }
+  onPtyExit(cb: (p: import('@shared/types').PtyExit) => void) {
+    return on('pty:exit', cb)
+  }
 
   onApprovalRequest(cb: (r: ApprovalRequest) => void): () => void {
     return on('approval:request', cb)

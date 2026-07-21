@@ -7,6 +7,8 @@ import type { ConnectionInfo, GrafanaInstance, SourceId } from '../../shared/typ
 import { learningsRepo } from '../db/repos/learnings'
 import { discoverServices } from '../registry/discovery'
 import { k8sStatus } from '../registry/k8s-status'
+import { claudeAuth } from '../providers/claude-auth'
+import { createPtyHost } from '../terminal/pty'
 import { mapRepo } from '../db/repos/map'
 import { investigationsRepo } from '../db/repos/investigations'
 import { eventsRepo } from '../db/repos/events'
@@ -53,6 +55,10 @@ const SOURCE_META: Record<SourceId, { name: string; requiredFirst?: boolean }> =
   slack: { name: 'Slack' },
   sentry: { name: 'Sentry' },
 }
+
+/** Set once registerIpc runs; main uses it to kill terminals on quit. */
+let ptyHost: ReturnType<typeof createPtyHost> | null = null
+export const getPtyHost = () => ptyHost
 
 export function registerIpc(deps: RegisterDeps): void {
   const { db } = deps
@@ -220,6 +226,22 @@ export function registerIpc(deps: RegisterDeps): void {
   // Connections → Kubernetes: probes local gcloud/az/kubectl and maps the
   // registry onto kubectl contexts. Read-only; no cloud creds are stored.
   handle('k8s:status', () => k8sStatus(db))
+
+  handle('claude:auth', () => claudeAuth())
+
+  // Embedded terminal. Every one of these is reached only from a renderer user
+  // gesture — the agent has no tool that touches them (see terminal/pty.ts).
+  const emitEvent = makeEmit(deps.win)
+  const pty = createPtyHost({
+    data: (p) => emitEvent('pty:data', p),
+    exit: (p) => emitEvent('pty:exit', p),
+  })
+  ptyHost = pty
+  handle('pty:spawn', (req) => pty.spawn(req))
+  handle('pty:write', ({ id, data }) => pty.write(id, data))
+  handle('pty:resize', ({ id, cols, rows }) => pty.resize(id, cols, rows))
+  handle('pty:kill', ({ id }) => pty.kill(id))
+  handle('pty:scrollback', ({ id }) => pty.scrollback(id))
 
   // "What Mesh knows" — totals for every inferred store, plus the exact
   // text that rides in prompts. Read-only aggregation; nothing cached.

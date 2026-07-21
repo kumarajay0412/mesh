@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 
 const require = createRequire(import.meta.url)
 
@@ -47,5 +47,32 @@ if (electronVersion) {
   console.log(`[rebuild-native] fetching Electron prebuild (electron ${electronVersion})`)
   fetch(['--runtime', 'electron', '--target', electronVersion], 'electron')
 }
+
+// 3 — node-pty ships its own prebuilt binaries (N-API, so one build serves both
+// Node and Electron — no ABI split needed). But on macOS it spawns through a
+// `spawn-helper` executable, and the +x bit normally comes from node-pty's
+// postinstall, which this repo intentionally does not run. Without it every
+// pty.spawn dies with "posix_spawnp failed".
+function fixPtySpawnHelper() {
+  let ptyDir
+  try {
+    ptyDir = dirname(require.resolve('node-pty/package.json'))
+  } catch {
+    return // node-pty not installed — nothing to do
+  }
+  const prebuilds = join(ptyDir, 'prebuilds')
+  const targets = []
+  if (existsSync(prebuilds)) {
+    for (const d of readdirSync(prebuilds)) {
+      const helper = join(prebuilds, d, 'spawn-helper')
+      if (existsSync(helper)) targets.push(helper)
+    }
+  }
+  const built = join(ptyDir, 'build', 'Release', 'spawn-helper')
+  if (existsSync(built)) targets.push(built)
+  for (const t of targets) chmodSync(t, 0o755)
+  console.log(`[rebuild-native] node-pty spawn-helper: ${targets.length ? `+x on ${targets.length}` : 'none found'}`)
+}
+fixPtySpawnHelper()
 
 console.log(`[rebuild-native] done — app: ${existsSync(defaultBinding) ? 'ok' : 'MISSING'} · tests: ${existsSync(nodeStash) ? 'ok' : 'MISSING'}`)
