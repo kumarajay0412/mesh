@@ -63,6 +63,21 @@ export const TOKEN_GUIDES: Record<SourceId, TokenGuide> = {
     caveat:
       'The groups:* scopes are only needed for private channels. A bot token cannot read a channel it has not been invited to — that is the usual reason a channel is missing from the picker. A user token (xoxp-…) with the same scopes also works and skips the invite step, but carries your own access rather than the app\u2019s.',
   },
+  notion: {
+    where: 'Notion → Settings → Connections → Develop or manage integrations',
+    url: 'https://www.notion.so/my-integrations',
+    urlLabel: 'Open Notion integrations',
+    steps: [
+      'New integration — name it "Mesh", pick your workspace, type Internal.',
+      'Capabilities: Read content is enough — Mesh never writes to Notion.',
+      'Copy the Internal Integration Secret.',
+      'Share pages with it: open a top-level page → ••• → Connections → add "Mesh". Sub-pages inherit access.',
+    ],
+    scopes: ['Read content'],
+    looksLike: 'ntn_… or secret_…',
+    caveat:
+      'The integration sees ONLY pages explicitly shared with it (children included). If a sync finds nothing, the token is fine — the pages just haven\u2019t been shared. Sharing your top-level workspace pages once covers everything beneath them.',
+  },
   sentry: {
     where: 'Sentry → Settings → Account → API → User Auth Tokens',
     url: 'https://sentry.io/settings/account/api/auth-tokens/',

@@ -27,6 +27,13 @@ const when = (r: MemoryRecord): string => {
  *  agent weights them as leads, not as human-confirmed ground truth. */
 export function formatHit(h: MemorySearchHit): string {
   const r = h.record
+  // Corpus docs (Notion) aren't incidents: show an excerpt + the URL so the
+  // agent can cite or open the page, and label it as documentation.
+  if (r.source === 'notion') {
+    const lines = [`[${r.id}] ${r.title} (notion doc · ${when(r)} · matched: ${h.matched})`, `  excerpt: ${clip(r.symptoms, 320) || '—'}`]
+    if (r.url) lines.push(`  url: ${r.url}`)
+    return lines.join('\n')
+  }
   const provenance = r.source === 'mesh' ? 'prior Mesh investigation — UNVERIFIED hypothesis' : `${r.source} · ${when(r)}`
   const lines = [`[${r.identifier ?? r.id}] ${r.title} (${provenance} · matched: ${h.matched})`, `  symptoms: ${clip(r.symptoms, 240) || '—'}`]
   if (r.rootCause) lines.push(`  ${r.source === 'mesh' ? 'hypothesized cause' : 'root cause'}: ${clip(r.rootCause, 240)}`)
@@ -36,10 +43,14 @@ export function formatHit(h: MemorySearchHit): string {
 
 /** Full single-record view for get_incident, discussion thread included. */
 export function formatRecord(r: MemoryRecord, discussion: string): string {
+  // A corpus doc's whole content lives in `symptoms`; get_incident is the
+  // "read the page" call, so give it a much larger bounded slice than the
+  // incident summary fields need.
+  const bodyBudget = r.source === 'notion' ? 6000 : 1200
   const parts = [
     `[${r.identifier ?? r.id}] ${r.title}`,
-    `source: ${r.source} · date: ${when(r)}${r.labels.length ? ` · labels: ${r.labels.join(', ')}` : ''}`,
-    `symptoms: ${clip(r.symptoms, 1200) || '—'}`,
+    `source: ${r.source} · date: ${when(r)}${r.labels.length ? ` · labels: ${r.labels.join(', ')}` : ''}${r.url ? ` · url: ${r.url}` : ''}`,
+    `${r.source === 'notion' ? 'content' : 'symptoms'}: ${clip(r.symptoms, bodyBudget) || '—'}`,
   ]
   if (r.errorSignature) parts.push(`error signature: ${r.errorSignature}`)
   if (r.rootCause) parts.push(`root cause: ${clip(r.rootCause, 800)}`)

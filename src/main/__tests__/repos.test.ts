@@ -27,7 +27,7 @@ describe('migrations', () => {
       expect(tables).toContain(t)
     }
     migrate(db) // second run: no-op, no throw
-    expect(db.pragma('user_version', { simple: true })).toBe(8)
+    expect(db.pragma('user_version', { simple: true })).toBe(9)
   })
 
   it('learnings embedding queue: accept → pending → embedded', () => {

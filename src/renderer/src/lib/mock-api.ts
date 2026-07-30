@@ -348,10 +348,11 @@ const SERVICES: ServiceEntry[] = [
 ]
 
 const CONNECTIONS: ConnectionInfo[] = [
-  { id: 'grafana', name: 'Grafana', status: 'connected', detail: 'grafana.acme.internal · 12 services', requiredFirst: true },
-  { id: 'linear', name: 'Linear', status: 'connected', detail: 'ENG · 1,204 issues' },
-  { id: 'slack', name: 'Slack', status: 'connected', detail: '#reporting · synced 4m ago' },
-  { id: 'sentry', name: 'Sentry', status: 'connected', detail: 'payments, auth, search' },
+  { id: 'grafana', name: 'Grafana', status: 'connected', detail: '2 instances · 194 services discovered', requiredFirst: true },
+  { id: 'linear', name: 'Linear', status: 'connected', detail: '3,520 tickets in memory', lastSyncAt: now - 2 * 60 * min },
+  { id: 'slack', name: 'Slack', status: 'connected', detail: '2 channels · 2,300 threads in memory', lastSyncAt: now - 4 * min },
+  { id: 'sentry', name: 'Sentry', status: 'connected', detail: 'live issue/event tools in every agent session' },
+  { id: 'notion', name: 'Notion', status: 'connected', detail: '128 pages in memory', lastSyncAt: now - 9 * min },
 ]
 
 /* --------------------------------------------------- scripted live stream -- */
@@ -709,6 +710,17 @@ export class MockApi implements MeshApi {
   async getContextSummary() {
     return {
       memory: { total: this.memory.length, bySource: { linear: 3, slack: 2, mesh: 1 }, embedded: this.memory.length - 1 },
+      repos: { count: 182, lastFetchedAt: now - 9 * min },
+      stores: [
+        { id: 'linear', label: 'Linear tickets', desc: 'distilled incidents — symptoms → root cause → fix', count: 3520, embedded: 3520 },
+        { id: 'slack', label: 'Slack threads', desc: 'distilled incident discussions', count: 2300, embedded: 2300 },
+        { id: 'notion', label: 'Notion pages', desc: 'verbatim knowledge corpus, linked to source', count: 57, embedded: 57 },
+        { id: 'mesh', label: 'Mesh investigations', desc: 'the agent\u2019s own past reports (unverified)', count: 22, embedded: 22 },
+        { id: 'learnings', label: 'Learnings', desc: 'accepted operational rules, injected by relevance', count: 7, embedded: 7 },
+        { id: 'services', label: 'Services', desc: 'registry — what runs where, how to query it', count: 185 },
+        { id: 'map', label: 'Map edges', desc: 'system topology across 24 nodes', count: 31 },
+        { id: 'repos', label: 'Git repos', desc: 'local checkouts for blame/log', count: 182 },
+      ],
       registry: { total: this.services.length, manual: 1 },
       map: {
         nodes: this.mapNodes.length,

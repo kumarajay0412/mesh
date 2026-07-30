@@ -39,6 +39,18 @@ export interface LinkedIncident {
   thread?: RawThread
 }
 
+/** A corpus document — a knowledge-base page ingested embed-only (no distill).
+ *  Its `text` becomes the searchable body; `url` links a hit back to source. */
+export interface CorpusDoc {
+  id: string // e.g. notion:<pageId>
+  source: 'notion'
+  title: string
+  text: string
+  url?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export interface DistilledIncident {
   symptoms: string
   rootCause?: string

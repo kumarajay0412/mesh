@@ -8,6 +8,7 @@ export interface MemoryRow {
   ticket_id: string | null
   identifier: string | null
   slack_url: string | null
+  url: string | null
   title: string
   symptoms: string
   root_cause: string | null
@@ -32,6 +33,7 @@ export function rowToRecord(r: MemoryRow): MemoryRecord {
     ticketId: r.ticket_id ?? undefined,
     identifier: r.identifier ?? undefined,
     slackUrl: r.slack_url ?? undefined,
+    url: r.url ?? undefined,
     title: r.title,
     symptoms: r.symptoms,
     rootCause: r.root_cause ?? undefined,
@@ -54,13 +56,13 @@ export function memoryRepo(db: Database) {
      *  else by primary id — re-running ingestion never duplicates (Section 7.1). */
     upsert(rec: MemoryRecord & { rawCommentsJson?: string }): void {
       db.prepare(
-        `INSERT INTO memory (id, source, ticket_id, identifier, slack_url, title, symptoms, root_cause, resolution,
+        `INSERT INTO memory (id, source, ticket_id, identifier, slack_url, url, title, symptoms, root_cause, resolution,
                              investigation_summary, resolution_steps_json, error_signature, raw_comments_json,
                              labels_json, priority, reported_at, resolved_at, updated_at, embedded)
-         VALUES (@id, @source, @ticketId, @identifier, @slackUrl, @title, @symptoms, @rootCause, @resolution,
+         VALUES (@id, @source, @ticketId, @identifier, @slackUrl, @url, @title, @symptoms, @rootCause, @resolution,
                  @summary, @steps, @signature, @raw, @labels, @priority, @reportedAt, @resolvedAt, @updatedAt, 0)
          ON CONFLICT(id) DO UPDATE SET
-           identifier = excluded.identifier, slack_url = excluded.slack_url, title = excluded.title,
+           identifier = excluded.identifier, slack_url = excluded.slack_url, url = excluded.url, title = excluded.title,
            symptoms = excluded.symptoms, root_cause = excluded.root_cause, resolution = excluded.resolution,
            investigation_summary = excluded.investigation_summary, resolution_steps_json = excluded.resolution_steps_json,
            error_signature = excluded.error_signature, raw_comments_json = coalesce(excluded.raw_comments_json, memory.raw_comments_json),
@@ -73,6 +75,7 @@ export function memoryRepo(db: Database) {
         ticketId: rec.ticketId ?? null,
         identifier: rec.identifier ?? null,
         slackUrl: rec.slackUrl ?? null,
+        url: rec.url ?? null,
         title: rec.title,
         symptoms: rec.symptoms,
         rootCause: rec.rootCause ?? null,

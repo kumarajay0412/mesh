@@ -39,6 +39,11 @@ const FORMS: Record<SourceId, { title: string; note: string; fields: FieldSpec[]
     note: 'Paste a bot or user token, then pick the channels where incidents get reported AND where RCAs/postmortems get written up — each syncs independently and its threads become searchable memory.',
     fields: [{ key: 'token', label: 'Token', secret: true, placeholder: 'xoxb-… or xoxp-…' }],
   },
+  notion: {
+    title: 'Connect Notion',
+    note: 'Internal integration token. Notion pages are ingested as a knowledge corpus — searchable verbatim (no LLM distillation, no cost per page), each hit linking back to the page. Only pages shared with the integration are visible.',
+    fields: [{ key: 'token', label: 'Integration token', secret: true, placeholder: 'ntn_…' }],
+  },
   sentry: {
     title: 'Connect Sentry',
     note: 'User auth token — create one at sentry.io → Settings → Account → API → User Auth Tokens, with scopes: org:read, project:read, event:read. The agent gets live Sentry tools (issues, events, stack traces) in every investigation.',

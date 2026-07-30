@@ -7,7 +7,7 @@ export const STAGES: Stage[] = ['intake', 'scope', 'investigate', 'report']
 
 export type InvestigationStatus = 'open' | 'investigating' | 'report' | 'closed' | 'abandoned' | 'failed'
 export type Confidence = 'suspected' | 'probable' | 'confirmed'
-export type SourceKind = 'linear' | 'slack' | 'sentry' | 'grafana' | 'manual'
+export type SourceKind = 'linear' | 'slack' | 'sentry' | 'grafana' | 'notion' | 'manual'
 
 /* ---------------------------------------------------------------- agent -- */
 
@@ -141,10 +141,13 @@ export interface Report {
 
 export interface MemoryRecord {
   id: string
-  source: 'linear' | 'slack' | 'mesh'
+  source: 'linear' | 'slack' | 'mesh' | 'notion'
   ticketId?: string
   identifier?: string
   slackUrl?: string
+  /** general source link — a Notion page URL, so a search hit opens at origin.
+   *  (slackUrl predates this and stays Slack-specific for cross-link parsing.) */
+  url?: string
   title: string
   symptoms: string
   rootCause?: string
@@ -190,14 +193,18 @@ export interface ServiceEntry {
 
 /* ---------------------------------------------------------- sync + conns -- */
 
-export type SourceId = 'grafana' | 'linear' | 'slack' | 'sentry'
+export type SourceId = 'grafana' | 'linear' | 'slack' | 'sentry' | 'notion'
 export type ConnStatus = 'connected' | 'pending' | 'error' | 'needs-connection'
 
 export interface ConnectionInfo {
   id: SourceId
   name: string
   status: ConnStatus
+  /** live substance, not boilerplate: what this connection has actually
+   *  yielded — "3,520 tickets", "2 channels · 2,300 threads", "128 pages" */
   detail: string
+  /** completion time of the source's last sync — renderer formats it */
+  lastSyncAt?: number
   requiredFirst?: boolean
 }
 
@@ -399,10 +406,26 @@ export interface K8sStatus {
   unmappedServices: string[] // candidate services with no k8s_context yet
 }
 
+/** One knowledge store's counter: id, human name, one-line nature, row count,
+ *  and (for embedded stores) how much of it is semantically indexed. */
+export interface KnowledgeStore {
+  id: string
+  label: string
+  /** what this store IS — "distilled tickets", "verbatim pages" */
+  desc: string
+  count: number
+  /** rows with a vector — absent for stores that aren't embedded (repos, map) */
+  embedded?: number
+}
+
 /** Everything Mesh has inferred so far — the transparency view behind the
  *  Knowledge Map's "What Mesh knows" panel. */
 export interface ContextSummary {
   memory: { total: number; bySource: Record<string, number>; embedded: number }
+  /** local git checkouts kept fresh for the agent's blame/log reads */
+  repos: { count: number; lastFetchedAt?: number }
+  /** one tile per knowledge store: what it is, how many rows, how indexed */
+  stores: KnowledgeStore[]
   registry: { total: number; manual: number }
   map: { nodes: number; edges: number; proposed: number }
   learnings: { accepted: number; proposed: number }

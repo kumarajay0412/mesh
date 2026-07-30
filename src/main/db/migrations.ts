@@ -218,4 +218,13 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE memory ADD COLUMN linked_id TEXT;
   `,
+
+  // v9 — corpus sources. Notion pages (and, later, general Slack channels) are
+  // ingested embed-only, not distilled: the page text lands in `symptoms` so
+  // FTS and the vector index cover it, with no root-cause structure to extract.
+  // Those records need a source link so a search hit can be opened at its
+  // origin — slack_url was Slack-specific, so this is the general one.
+  `
+  ALTER TABLE memory ADD COLUMN url TEXT;
+  `,
 ]

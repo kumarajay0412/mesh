@@ -1,4 +1,5 @@
 import type { ConnectionInfo } from '@shared/types'
+import { timeAgo } from '../../lib/format'
 import { Button, Dot, Pill } from '../ui'
 
 const TONE = { connected: 'ok', pending: 'warn', error: 'danger', 'needs-connection': 'warn' } as const
@@ -19,7 +20,10 @@ export function ConnectionCard({ conn, onManage }: { conn: ConnectionInfo; onMan
           <span className="text-[14px] font-medium text-txt">{conn.name}</span>
           {conn.requiredFirst && <Pill tone="gold">required first</Pill>}
         </div>
-        <div className="font-mono text-[11px] text-subtle">{conn.detail}</div>
+        <div className="font-mono text-[11px] text-subtle">
+          {conn.detail}
+          {conn.lastSyncAt ? ` · synced ${timeAgo(conn.lastSyncAt)}` : ''}
+        </div>
       </div>
       <div className="flex-1" />
       <Pill tone={TONE[conn.status]}>

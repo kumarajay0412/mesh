@@ -11,16 +11,18 @@ import { slackThreadsRepo } from '../db/repos/slackThreads'
 import type { SecretStore } from '../security/secrets'
 import { fetchLinearSince } from './linear'
 import { fetchSlackSince } from './slack'
+import { fetchNotionSince, notionWhoAmI } from './notion'
 import { linkIncidents } from './link'
 import { distillIncident, heuristicDistill, findSignature, incidentText, type LlmOneShot } from './distill'
 import { syncRepos, REPOS_SOURCE } from '../repos/sync'
-import type { LinkedIncident, RawThread, RawTicket } from './types'
+import type { CorpusDoc, LinkedIncident, RawThread, RawTicket } from './types'
 import { log } from '../log'
 
 const l = log('sync')
 
 export const LINEAR_SOURCE = 'linear'
 export const SLACK_PREFIX = 'slack:'
+export const NOTION_SOURCE = 'notion'
 
 export interface SyncDeps {
   db: Database
@@ -42,7 +44,8 @@ export function knownSources(deps: SyncDeps): string[] {
     .split(',')
     .map((c) => c.trim().replace(/^#/, ''))
     .filter(Boolean)
-  return [LINEAR_SOURCE, ...channels.map((c) => `${SLACK_PREFIX}${c}`), REPOS_SOURCE]
+  const notion = deps.secrets.has('notion.token') ? [NOTION_SOURCE] : []
+  return [LINEAR_SOURCE, ...channels.map((c) => `${SLACK_PREFIX}${c}`), ...notion, REPOS_SOURCE]
 }
 
 export async function runSync(deps: SyncDeps, sources?: string[]): Promise<{ runId: string }> {
@@ -121,6 +124,39 @@ async function syncOne(deps: SyncDeps, runId: string, source: string): Promise<v
       if (nextCursor) states.setCursor(source, nextCursor) // after completion only
       states.finishRun(source, 'idle')
       emit('done', ingested, ingested)
+    } catch (e) {
+      states.finishRun(source, 'error', (e as Error).message)
+      emit('error', ingested, undefined, (e as Error).message)
+    }
+    return
+  }
+
+  if (source === NOTION_SOURCE) {
+    const token = deps.secrets.get('notion.token')
+    if (!token) {
+      states.finishRun(source, 'needs-connection', 'no Notion token')
+      emit('done', 0, 0, 'needs connection')
+      return
+    }
+    states.markRunning(source)
+    let ingested = 0
+    try {
+      const cursor = states.get(source).cursor
+      emit('fetch', 0)
+      const nextCursor = await fetchNotionSince(token, cursor, async (docs) => {
+        ingested += ingestCorpus(deps, docs, emit, ingested)
+      })
+      if (nextCursor) states.setCursor(source, nextCursor) // after completion only
+      // A clean walk with nothing in memory = valid token, zero shared pages.
+      // Name the integration so the user can check they shared with THIS one.
+      let note: string | undefined
+      if (ingested === 0 && (deps.db.prepare(`SELECT COUNT(*) c FROM memory WHERE source = 'notion'`).get() as { c: number }).c === 0) {
+        const who = await notionWhoAmI(token)
+        note = who ? `token is ${who} — 0 pages shared with it` : undefined
+        if (note) l.info(`notion: ${note}`)
+      }
+      states.finishRun(source, 'idle', note)
+      emit('done', ingested, ingested, note)
     } catch (e) {
       states.finishRun(source, 'error', (e as Error).message)
       emit('error', ingested, undefined, (e as Error).message)
@@ -214,6 +250,41 @@ async function ingestPage(
   }
   if (gatedShort > 0) l.info(`distill gate: ${gatedShort}/${incidents.length} short incidents took the heuristic path (no LLM call)`)
   deps.onIngested?.()
+  return done
+}
+
+/** The CORPUS path: upsert verbatim, no link, no distill. The page text lands
+ *  in `symptoms` — FTS's highest-weighted, unbounded column — so the whole
+ *  document is lexically searchable, and the embedding drain picks the row up
+ *  like any other (it embeds the opening slice). Free per item, so bulk
+ *  knowledge-base sources scale without LLM spend. */
+function ingestCorpus(
+  deps: SyncDeps,
+  docs: CorpusDoc[],
+  emit: (phase: SyncProgressEvent['phase'], done: number, total?: number, message?: string) => void,
+  alreadyDone: number,
+): number {
+  const memory = memoryRepo(deps.db)
+  let done = 0
+  for (const doc of docs) {
+    // Same skip-unchanged contract as incidents: equal updatedAt ⇒ no re-upsert
+    // (which would needlessly re-embed via embedded=0).
+    if (memory.updatedAtOf(doc.id) === doc.updatedAt) continue
+    memory.upsert({
+      id: doc.id,
+      source: doc.source,
+      title: doc.title,
+      url: doc.url,
+      symptoms: doc.text,
+      resolutionSteps: [],
+      labels: [],
+      reportedAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    })
+    done++
+  }
+  emit('upsert', alreadyDone + done, undefined)
+  if (done > 0) deps.onIngested?.()
   return done
 }
 

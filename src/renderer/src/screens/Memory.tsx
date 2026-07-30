@@ -5,6 +5,7 @@ import { SearchBar } from '../components/memory/SearchBar'
 import { MemoryResult } from '../components/memory/MemoryResult'
 import { SyncPanel } from '../components/memory/SyncPanel'
 import { ModelStatusPill } from '../components/memory/ModelStatusPill'
+import { StoreCounters } from '../components/memory/StoreCounters'
 import { EmptyState } from '../components/ui'
 
 export function Memory() {
@@ -19,6 +20,10 @@ export function Memory() {
       <ScreenHeader eyebrow="Incident memory" title="Memory" right={<ModelStatusPill status={model} />} />
 
       <div className="mt-5">
+        <StoreCounters />
+      </div>
+
+      <div className="mt-4">
         <SearchBar onSearch={(q) => void search(q)} searching={searching} />
       </div>
 

@@ -57,6 +57,7 @@ const SOURCE_META: Record<SourceId, { name: string; requiredFirst?: boolean }> =
   linear: { name: 'Linear' },
   slack: { name: 'Slack' },
   sentry: { name: 'Sentry' },
+  notion: { name: 'Notion' },
 }
 
 /** Set once registerIpc runs; main uses it to kill terminals on quit. */
@@ -115,7 +116,13 @@ export function registerIpc(deps: RegisterDeps): void {
     for (const src of known) {
       if (!listed.has(src)) {
         const ready =
-          src === 'repos' ? true : src === 'linear' ? deps.secrets.has('linear.apiKey') : deps.secrets.has('slack.token')
+          src === 'repos'
+            ? true
+            : src === 'linear'
+              ? deps.secrets.has('linear.apiKey')
+              : src === 'notion'
+                ? deps.secrets.has('notion.token')
+                : deps.secrets.has('slack.token')
         listed.set(src, { source: src, status: ready ? 'idle' : 'needs-connection' })
       }
     }
@@ -128,18 +135,36 @@ export function registerIpc(deps: RegisterDeps): void {
   handle('registry:save', ({ entry }) => void services.upsert({ ...entry, source: 'manual' }))
   handle('registry:discover', () => discoverServices(db, deps.secrets))
 
-  // connections
+  // connections — each card reports what the connection has actually yielded
+  // (counts from memory, channels from config, sync recency), not boilerplate.
+  // All cheap indexed queries; recomputed per open of the screen.
   handle('connections:list', () => {
     const presence = deps.secrets.presence()
+    const memCounts = new Map(
+      (db.prepare('SELECT source, COUNT(*) c FROM memory GROUP BY source').all() as { source: string; c: number }[]).map((r) => [r.source, r.c]),
+    )
+    const syncBySource = new Map(syncStates.list().map((st) => [st.source, st]))
+    const lastSyncOf = (prefixOrName: string): number | undefined => {
+      let max: number | undefined
+      for (const [src, st] of syncBySource) {
+        if (src === prefixOrName || src.startsWith(`${prefixOrName}:`)) {
+          if (st.lastRunAt && (!max || st.lastRunAt > max)) max = st.lastRunAt
+        }
+      }
+      return max
+    }
+    const fmt = (x: number) => x.toLocaleString('en-US')
+
     return (Object.keys(SOURCE_META) as SourceId[]).map((id): ConnectionInfo => {
       if (id === 'grafana') {
-        const n = readInstances().length
+        const instances = readInstances().length
+        const svcCount = (db.prepare('SELECT COUNT(*) c FROM services').get() as { c: number }).c
         return {
           id,
           name: 'Grafana',
           requiredFirst: true,
-          status: n > 0 ? 'connected' : 'needs-connection',
-          detail: n > 0 ? `${n} instance${n > 1 ? 's' : ''} — manage to view` : 'not connected',
+          status: instances > 0 ? 'connected' : 'needs-connection',
+          detail: instances > 0 ? `${instances} instance${instances > 1 ? 's' : ''} · ${fmt(svcCount)} services discovered` : 'not connected',
         }
       }
       const connected = !!presence[id]
@@ -153,13 +178,32 @@ export function registerIpc(deps: RegisterDeps): void {
           detail: 'stored token unreadable (app identity changed) — re-enter it',
         }
       }
-      return {
-        id,
-        name: SOURCE_META[id].name,
-        requiredFirst: SOURCE_META[id].requiredFirst,
-        status: connected ? 'connected' : 'needs-connection',
-        detail: connected ? 'token stored in OS keychain' : 'not connected',
+      if (!connected) {
+        return { id, name: SOURCE_META[id].name, requiredFirst: SOURCE_META[id].requiredFirst, status: 'needs-connection', detail: 'not connected' }
       }
+
+      let detail = 'token stored in OS keychain'
+      let lastSyncAt: number | undefined
+      if (id === 'linear') {
+        detail = `${fmt(memCounts.get('linear') ?? 0)} tickets in memory`
+        lastSyncAt = lastSyncOf('linear')
+      } else if (id === 'slack') {
+        const channels = (deps.secrets.get('slack.channel') ?? '').split(',').map((c) => c.trim()).filter(Boolean)
+        const threads = memCounts.get('slack') ?? 0
+        detail = channels.length
+          ? `${channels.length} channel${channels.length > 1 ? 's' : ''} · ${fmt(threads)} threads in memory`
+          : 'token stored — pick channels to sync'
+        lastSyncAt = lastSyncOf('slack')
+      } else if (id === 'notion') {
+        const pages = memCounts.get('notion') ?? 0
+        lastSyncAt = lastSyncOf('notion')
+        // 0 pages after a completed sync is the classic unshared-integration
+        // state — say so instead of looking healthy-but-empty.
+        detail = pages > 0 ? `${fmt(pages)} pages in memory` : lastSyncAt ? '0 pages — share pages with the integration in Notion' : 'connected — first sync pending'
+      } else if (id === 'sentry') {
+        detail = 'live issue/event tools in every agent session'
+      }
+      return { id, name: SOURCE_META[id].name, requiredFirst: SOURCE_META[id].requiredFirst, status: 'connected', detail, lastSyncAt }
     })
   })
 
@@ -298,12 +342,39 @@ export function registerIpc(deps: RegisterDeps): void {
     const manual = (db.prepare(`SELECT COUNT(*) c FROM services WHERE source = 'manual'`).get() as { c: number }).c
     const edges = map.edges()
     const accepted = learnings.list('accepted')
+    const repoRow = db.prepare('SELECT COUNT(*) c, MAX(last_fetched_at) m FROM repos').get() as { c: number; m: number | null }
+    // Per-store counters — memory sources split by pipeline (distilled incident
+    // vs verbatim corpus), then the derived stores. Embedded counts come from
+    // the same GROUP BY so the tiles show indexing progress during a drain.
+    const memStats = new Map(
+      (db.prepare('SELECT source, COUNT(*) c, SUM(embedded) e FROM memory GROUP BY source').all() as { source: string; c: number; e: number }[]).map(
+        (r) => [r.source, r],
+      ),
+    )
+    const learningsEmbedded = (db.prepare('SELECT COUNT(*) c FROM learnings WHERE status = ? AND embedded = 1').get('accepted') as { c: number }).c
+    const nodes = map.nodes().length
+    const mem = (source: string, label: string, desc: string) => {
+      const r = memStats.get(source)
+      return { id: source, label, desc, count: r?.c ?? 0, embedded: r?.e ?? 0 }
+    }
+    const stores = [
+      mem('linear', 'Linear tickets', 'distilled incidents — symptoms → root cause → fix'),
+      mem('slack', 'Slack threads', 'distilled incident discussions'),
+      mem('notion', 'Notion pages', 'verbatim knowledge corpus, linked to source'),
+      mem('mesh', 'Mesh investigations', 'the agent\u2019s own past reports (unverified)'),
+      { id: 'learnings', label: 'Learnings', desc: 'accepted operational rules, injected by relevance', count: accepted.length, embedded: learningsEmbedded },
+      { id: 'services', label: 'Services', desc: 'registry — what runs where, how to query it', count: services.list().length },
+      { id: 'map', label: 'Map edges', desc: `system topology across ${nodes} nodes`, count: edges.filter((e) => e.status === 'accepted').length },
+      { id: 'repos', label: 'Git repos', desc: 'local checkouts for blame/log', count: repoRow.c },
+    ]
     return {
+      stores,
       memory: {
         total: bySourceRows.reduce((a, r) => a + r.c, 0),
         bySource: Object.fromEntries(bySourceRows.map((r) => [r.source, r.c])),
         embedded,
       },
+      repos: { count: repoRow.c, lastFetchedAt: repoRow.m ?? undefined },
       registry: { total: services.list().length, manual },
       map: {
         nodes: map.nodes().length,

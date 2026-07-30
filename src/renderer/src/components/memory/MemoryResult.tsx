@@ -46,6 +46,11 @@ export function MemoryResult({ hit }: { hit: MemorySearchHit }) {
       <div className="mt-3 flex gap-3 border-t border-line pt-2.5 font-mono text-[11px]">
         {record.identifier && <a className="no-drag text-subtle underline-offset-2 hover:text-muted hover:underline" href="#">{record.identifier} ↗</a>}
         {record.slackUrl && <a className="no-drag text-subtle underline-offset-2 hover:text-muted hover:underline" href={record.slackUrl} target="_blank" rel="noreferrer">slack thread ↗</a>}
+        {record.url && (
+          <a className="no-drag text-subtle underline-offset-2 hover:text-muted hover:underline" href={record.url} target="_blank" rel="noreferrer">
+            open in {record.source === 'notion' ? 'Notion' : 'source'} ↗
+          </a>
+        )}
         <div className="flex-1" />
         <span className="text-subtle">score {hit.score.toFixed(2)}</span>
       </div>
