@@ -18,15 +18,74 @@ Everything runs on your machine, on your own accounts. There is no hosted servic
 
 ## How it fits together
 
-```
-Linear ──┐                          ┌─▶ similar incidents ─┐
-Slack  ──┼─▶ distill ─▶ memory ─────┤                      ├─▶ system prompt ─▶ read-only agent session
-         │   (SQLite + FTS + vec)   └─▶ mid-run search ────┘        │            git · rg · Sentry · kubectl
-         │                                                          ▼
-     you gate: approvals · learnings · map edges  ◀───  evidence-linked report ─▶ posted to Linear (on approve)
+Two halves: a **brain** that ingests the org in the background, and an **investigation loop** that pulls from all of it on demand.
+
+### The brain — how the org gets in
+
+```mermaid
+flowchart LR
+    subgraph accounts["Your accounts — read-only tokens, OS keychain"]
+        LIN["Linear<br/>tickets + comments"]
+        SLK["Slack<br/>incident / RCA channels"]
+        NOT["Notion<br/>shared pages"]
+        GRAF["Grafana<br/>Loki labels"]
+        GIT["GitHub<br/>org repos"]
+    end
+
+    subgraph pipelines["Ingestion — incremental, crash-safe cursors"]
+        DIST["incident pipeline<br/>LLM distill →<br/>symptoms · root cause · fix ·<br/>error signature"]
+        CORP["corpus pipeline<br/>verbatim text, no LLM —<br/>free per page"]
+        DISC["service discovery"]
+        FETCH["git fetch on schedule"]
+    end
+
+    subgraph brain["mesh.db — one local SQLite file"]
+        MEM[("memory<br/>FTS5 + sqlite-vec<br/>local MiniLM embeddings")]
+        REG[("service registry")]
+        MAP[("knowledge map<br/>who calls whom")]
+        LRN[("learnings<br/>user-approved rules")]
+        REPOS[("local checkouts")]
+    end
+
+    LIN --> DIST
+    SLK --> DIST
+    NOT --> CORP
+    DIST --> MEM
+    CORP --> MEM
+    GRAF --> DISC --> REG
+    GIT --> FETCH --> REPOS
 ```
 
-The deep dive — the exact agentic loop, the permission gate, the report schema, a real annotated trace — is in [`agent-loop.md`](./agent-loop.md). Design history lives in [`architecture.md`](./architecture.md) and [`ideation.md`](./ideation.md).
+### An investigation — how it pulls from everything
+
+```mermaid
+flowchart TB
+    TICKET["ticket URL or symptom"] --> INTAKE["intake<br/>extract symptoms · services · window"]
+
+    INTAKE --> PRE["deterministic pre-collect (code, not model)<br/>Grafana annotations · Loki error deltas ·<br/>k8s signals: restarts · OOMKills · deploys"]
+    INTAKE --> SIM["hybrid memory search<br/>signature exact → BM25 → vector KNN"]
+
+    PRE --> CTX["context assembly → system prompt<br/>pre-collected brief · similar incidents ·<br/>service registry · system map · learnings"]
+    SIM --> CTX
+
+    CTX --> SESSION["Claude Code session — your login<br/>read-only command gate, deny by default"]
+
+    SESSION -->|"git log / blame · rg"| REPOS2["local repo checkouts"]
+    SESSION -->|"kubectl (read-only, per-service context)"| K8S["GKE / AKS clusters"]
+    SESSION -->|"live MCP tools"| SENTRY["Sentry issues · events"]
+    SESSION -->|"search_memory · get_incident"| MEM2[("org memory<br/>incl. Notion docs + URLs")]
+    STEER["you: steer · interrupt · comment"] -.-> SESSION
+
+    SESSION --> REPORT["evidence-linked report<br/>culprit repo/sha/path · confidence ·<br/>charts · red herrings · API cost"]
+
+    REPORT --> GATE{"your approval<br/>(deny by default)"}
+    GATE -->|approve| LINEAR["post to Linear"]
+    GATE -->|approve| FIX["open fix session"]
+    REPORT --> PROPOSE["proposed learnings + map edges"] --> GATE2{"accept / dismiss"} -->|accepted| BRAIN2[("back into the brain —<br/>next incident starts here")]
+    REPORT --> HTML["self-contained HTML report<br/>(offline, charts inline)"]
+```
+
+Every write crosses an approval gate; every claim in the report cites the query, command output, or commit it came from. The deep dive — the exact agentic loop, the permission gate, the report schema, a real annotated trace — is in [`agent-loop.md`](./agent-loop.md). Design history lives in [`architecture.md`](./architecture.md) and [`ideation.md`](./ideation.md). Connecting sources and writing new connectors: [`docs/connecting-sources.md`](./docs/connecting-sources.md) · [`docs/building-a-connector.md`](./docs/building-a-connector.md).
 
 ## Local-first, by construction
 
