@@ -208,8 +208,20 @@ export function ConnectWizard({
 
         {source === 'slack' && (
           <div className="flex flex-col gap-2.5">
+            {/* Opt-in corpus: everything public, verbatim, embed-only (free).
+                Off by default — the first walk is big and nobody should get an
+                hours-long backfill by surprise. */}
+            <div className="flex items-start justify-between gap-3 rounded-md border border-line bg-ink-900 px-3 py-2.5">
+              <div>
+                <div className="text-[12.5px] font-medium text-txt">Index all public channels</div>
+                <div className="text-[11px] leading-snug text-subtle">
+                  Verbatim, searchable archive of every public channel — no LLM cost. Needs a user token (xoxp-…) unless the bot is in every channel. First sync can take a while; it runs in the background and resumes.
+                </div>
+              </div>
+              <Toggle on={values.corpus === '1'} onChange={() => setValues((v) => ({ ...v, corpus: v.corpus === '1' ? '0' : '1' }))} />
+            </div>
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-subtle">channels</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-subtle">incident channels (distilled)</span>
               <button
                 className="no-drag font-mono text-[11px] text-subtle hover:text-txt"
                 onClick={() => setManualChannels((m) => !m)}

@@ -11,6 +11,7 @@ import { slackThreadsRepo } from '../db/repos/slackThreads'
 import type { SecretStore } from '../security/secrets'
 import { fetchLinearSince } from './linear'
 import { fetchSlackSince } from './slack'
+import { fetchSlackCorpus, slackApi } from './slack-corpus'
 import { fetchNotionSince, notionWhoAmI } from './notion'
 import { linkIncidents } from './link'
 import { distillIncident, heuristicDistill, findSignature, incidentText, type LlmOneShot } from './distill'
@@ -23,6 +24,7 @@ const l = log('sync')
 export const LINEAR_SOURCE = 'linear'
 export const SLACK_PREFIX = 'slack:'
 export const NOTION_SOURCE = 'notion'
+export const SLACK_CORPUS_SOURCE = 'slack-corpus'
 
 export interface SyncDeps {
   db: Database
@@ -45,7 +47,10 @@ export function knownSources(deps: SyncDeps): string[] {
     .map((c) => c.trim().replace(/^#/, ''))
     .filter(Boolean)
   const notion = deps.secrets.has('notion.token') ? [NOTION_SOURCE] : []
-  return [LINEAR_SOURCE, ...channels.map((c) => `${SLACK_PREFIX}${c}`), ...notion, REPOS_SOURCE]
+  // The all-public-channels corpus is opt-in (Slack dialog toggle): its first
+  // walk is large, so nobody should get it by surprise.
+  const slackCorpus = deps.secrets.has('slack.token') && deps.secrets.get('slack.corpus') === '1' ? [SLACK_CORPUS_SOURCE] : []
+  return [LINEAR_SOURCE, ...channels.map((c) => `${SLACK_PREFIX}${c}`), ...slackCorpus, ...notion, REPOS_SOURCE]
 }
 
 export async function runSync(deps: SyncDeps, sources?: string[]): Promise<{ runId: string }> {
@@ -124,6 +129,49 @@ async function syncOne(deps: SyncDeps, runId: string, source: string): Promise<v
       if (nextCursor) states.setCursor(source, nextCursor) // after completion only
       states.finishRun(source, 'idle')
       emit('done', ingested, ingested)
+    } catch (e) {
+      states.finishRun(source, 'error', (e as Error).message)
+      emit('error', ingested, undefined, (e as Error).message)
+    }
+    return
+  }
+
+  if (source === SLACK_CORPUS_SOURCE) {
+    const token = deps.secrets.get('slack.token')
+    if (!token) {
+      states.finishRun(source, 'needs-connection', 'no Slack token')
+      emit('done', 0, 0, 'needs connection')
+      return
+    }
+    states.markRunning(source)
+    let ingested = 0
+    try {
+      // Cursor = per-channel JSON map; each channel advances when ITS walk
+      // completes (channels are independent — a crash re-walks only one).
+      let cursors: Record<string, string> = {}
+      try {
+        cursors = JSON.parse(states.get(source).cursor ?? '{}') as Record<string, string>
+      } catch {
+        cursors = {}
+      }
+      const excludeNames = (deps.secrets.get('slack.channel') ?? '').split(',')
+      emit('fetch', 0)
+      const result = await fetchSlackCorpus(
+        slackApi(token),
+        cursors,
+        excludeNames,
+        async (docs) => {
+          ingested += ingestCorpus(deps, docs, emit, ingested)
+        },
+        (channelId, newCursor) => {
+          cursors[channelId] = newCursor
+          states.setCursor(source, JSON.stringify(cursors))
+        },
+        (name, i, total) => emit('fetch', ingested, undefined, `#${name} · ${i}/${total}`),
+      )
+      const note = result.skippedNotMember > 0 ? `${result.skippedNotMember} channel(s) unreadable — bot not a member (use a user token, or /invite it)` : undefined
+      states.finishRun(source, 'idle', note)
+      emit('done', ingested, ingested, note)
     } catch (e) {
       states.finishRun(source, 'error', (e as Error).message)
       emit('error', ingested, undefined, (e as Error).message)

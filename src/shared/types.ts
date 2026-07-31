@@ -141,7 +141,7 @@ export interface Report {
 
 export interface MemoryRecord {
   id: string
-  source: 'linear' | 'slack' | 'mesh' | 'notion'
+  source: 'linear' | 'slack' | 'mesh' | 'notion' | 'slack-corpus'
   ticketId?: string
   identifier?: string
   slackUrl?: string

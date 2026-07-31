@@ -61,7 +61,7 @@ export const TOKEN_GUIDES: Record<SourceId, TokenGuide> = {
     scopes: ['channels:history', 'channels:read', 'groups:history', 'groups:read'],
     looksLike: 'xoxb-…',
     caveat:
-      'The groups:* scopes are only needed for private channels. A bot token cannot read a channel it has not been invited to — that is the usual reason a channel is missing from the picker. A user token (xoxp-…) with the same scopes also works and skips the invite step, but carries your own access rather than the app\u2019s.',
+      'The groups:* scopes are only needed for private channels. A bot token cannot read a channel it has not been invited to — that is the usual reason a channel is missing from the picker. A user token (xoxp-…) with the same scopes also works and skips the invite step, but carries your own access rather than the app\u2019s. The all-public-channels corpus effectively requires one \u2014 a bot can only read channels it was invited to.',
   },
   notion: {
     where: 'Notion → Settings → Connections → Develop or manage integrations',

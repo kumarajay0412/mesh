@@ -193,6 +193,9 @@ export function registerIpc(deps: RegisterDeps): void {
         detail = channels.length
           ? `${channels.length} channel${channels.length > 1 ? 's' : ''} · ${fmt(threads)} threads in memory`
           : 'token stored — pick channels to sync'
+        if (deps.secrets.get('slack.corpus') === '1') {
+          detail += ` · corpus: ${fmt(memCounts.get('slack-corpus') ?? 0)} docs`
+        }
         lastSyncAt = lastSyncOf('slack')
       } else if (id === 'notion') {
         const pages = memCounts.get('notion') ?? 0
@@ -361,6 +364,7 @@ export function registerIpc(deps: RegisterDeps): void {
       mem('linear', 'Linear tickets', 'distilled incidents — symptoms → root cause → fix'),
       mem('slack', 'Slack threads', 'distilled incident discussions'),
       mem('notion', 'Notion pages', 'verbatim knowledge corpus, linked to source'),
+      mem('slack-corpus', 'Slack corpus', 'all public channels, verbatim threads + daily digests'),
       mem('mesh', 'Mesh investigations', 'the agent\u2019s own past reports (unverified)'),
       { id: 'learnings', label: 'Learnings', desc: 'accepted operational rules, injected by relevance', count: accepted.length, embedded: learningsEmbedded },
       { id: 'services', label: 'Services', desc: 'registry — what runs where, how to query it', count: services.list().length },

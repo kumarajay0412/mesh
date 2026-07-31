@@ -42,8 +42,8 @@ export interface LinkedIncident {
 /** A corpus document — a knowledge-base page ingested embed-only (no distill).
  *  Its `text` becomes the searchable body; `url` links a hit back to source. */
 export interface CorpusDoc {
-  id: string // e.g. notion:<pageId>
-  source: 'notion'
+  id: string // e.g. notion:<pageId>, slackc:<channel>:<ts>
+  source: 'notion' | 'slack-corpus'
   title: string
   text: string
   url?: string

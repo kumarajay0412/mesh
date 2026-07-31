@@ -48,7 +48,7 @@ export function MemoryResult({ hit }: { hit: MemorySearchHit }) {
         {record.slackUrl && <a className="no-drag text-subtle underline-offset-2 hover:text-muted hover:underline" href={record.slackUrl} target="_blank" rel="noreferrer">slack thread ↗</a>}
         {record.url && (
           <a className="no-drag text-subtle underline-offset-2 hover:text-muted hover:underline" href={record.url} target="_blank" rel="noreferrer">
-            open in {record.source === 'notion' ? 'Notion' : 'source'} ↗
+            open in {record.source === 'notion' ? 'Notion' : record.source === 'slack-corpus' ? 'Slack' : 'source'} ↗
           </a>
         )}
         <div className="flex-1" />

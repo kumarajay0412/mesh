@@ -10,7 +10,7 @@ Everything runs on your machine, on your own accounts. There is no hosted servic
 
 ## What it does
 
-- **Builds a searchable incident memory** — ingests your Linear tickets (with comment threads) and Slack incident/RCA channels, distills each into structured fields (symptoms · root cause · resolution), and indexes them three ways: exact error-signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model. "Staff can't open the dashboard" finds "site can't be reached" with zero shared words.
+- **Builds a searchable org memory, two pipelines** — *incident* sources (Linear tickets with comment threads, your chosen Slack incident/RCA channels) are LLM-distilled into structured fields (symptoms · root cause · resolution · error signature); *corpus* sources (every shared Notion page, and — opt-in — **every public Slack channel**) are stored verbatim at zero LLM cost, each hit linking back to its page or thread. Everything is indexed three ways: exact error-signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model. "Staff can't open the dashboard" finds "site can't be reached" with zero shared words.
 - **Runs real investigations** — spawns a Claude Code session (via *your* Claude login — the Agent SDK, no API key of Mesh's own) inside your local repo checkouts, primed with a versioned SRE runbook, the similar past incidents, your service registry, and your system topology. The session is **read-only by default**: git log/blame, ripgrep, kubectl reads, live Sentry MCP tools, and mid-run memory search.
 - **Names culprits with evidence** — reports carry a confidence tier, a culprit `repo/sha/path`, ranked suspects, a structured root-cause story (numbered points, per-service verdicts, measured charts, red herrings, honest unknowns), and an evidence chain where **every claim cites its query, command output, or commit**. A claim without a source doesn't ship.
 - **Gates every write behind you** — any mutating action pops an approval modal (deny by default, 10-minute timeout = deny, deny-all on window close). Posting the report to Linear, opening a fix session in your terminal — all explicit approvals, all audited.
@@ -26,7 +26,7 @@ Two halves: a **brain** that ingests the org in the background, and an **investi
 flowchart LR
     subgraph accounts["Your accounts — read-only tokens, OS keychain"]
         LIN["Linear<br/>tickets + comments"]
-        SLK["Slack<br/>incident / RCA channels"]
+        SLK["Slack<br/>incident channels + all public"]
         NOT["Notion<br/>shared pages"]
         GRAF["Grafana<br/>Loki labels"]
         GIT["GitHub<br/>org repos"]
@@ -48,7 +48,8 @@ flowchart LR
     end
 
     LIN --> DIST
-    SLK --> DIST
+    SLK -->|"picked channels"| DIST
+    SLK -->|"all public (opt-in)"| CORP
     NOT --> CORP
     DIST --> MEM
     CORP --> MEM
@@ -100,7 +101,7 @@ npm run electron:dev # the desktop app, hot-reloading
 
 Then, inside the app:
 
-1. **Connections** — add your Grafana instance(s) (read-scoped token; service discovery reads your Loki labels and drafts a service registry mapped to your local repos), your Linear API key, Slack (paste a token, then *pick* your incident/RCA channels from a live list — each syncs independently), and optionally Sentry (the agent gets live issue/event/trace tools).
+1. **Connections** — add your Grafana instance(s) (read-scoped token; service discovery reads your Loki labels and drafts a service registry mapped to your local repos), your Linear API key, Slack (paste a token, *pick* your incident/RCA channels from a live list, and optionally flip **Index all public channels** for the verbatim corpus — a user token reads channels without invites), Notion (share pages with the integration; they ingest verbatim with backlinks), and optionally Sentry (the agent gets live issue/event/trace tools). Every dialog carries a step-by-step token guide, and each card reports what actually arrived — counts, sync recency, and zero-yield states that say why.
 2. **Memory → Refresh** — first run is the backfill; every run after is incremental via per-source cursors. Sync is crash-safe: cursors only advance after a complete walk, and re-walks are absorbed idempotently.
 3. **Knowledge map → Seed from description** — paste a plain-language description of your system (or an architecture doc); one cheap model call extracts services and who-calls-whom into an editable map. Mesh ships knowing nothing about anyone's org — this is where *yours* comes in. Investigations propose additions from then on.
 4. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline; steer it mid-flight; approve or deny anything that wants to write.

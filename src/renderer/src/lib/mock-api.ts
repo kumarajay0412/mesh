@@ -350,7 +350,7 @@ const SERVICES: ServiceEntry[] = [
 const CONNECTIONS: ConnectionInfo[] = [
   { id: 'grafana', name: 'Grafana', status: 'connected', detail: '2 instances · 194 services discovered', requiredFirst: true },
   { id: 'linear', name: 'Linear', status: 'connected', detail: '3,520 tickets in memory', lastSyncAt: now - 2 * 60 * min },
-  { id: 'slack', name: 'Slack', status: 'connected', detail: '2 channels · 2,300 threads in memory', lastSyncAt: now - 4 * min },
+  { id: 'slack', name: 'Slack', status: 'connected', detail: '2 channels · 2,300 threads in memory · corpus: 4,812 docs', lastSyncAt: now - 4 * min },
   { id: 'sentry', name: 'Sentry', status: 'connected', detail: 'live issue/event tools in every agent session' },
   { id: 'notion', name: 'Notion', status: 'connected', detail: '128 pages in memory', lastSyncAt: now - 9 * min },
 ]
@@ -715,6 +715,7 @@ export class MockApi implements MeshApi {
         { id: 'linear', label: 'Linear tickets', desc: 'distilled incidents — symptoms → root cause → fix', count: 3520, embedded: 3520 },
         { id: 'slack', label: 'Slack threads', desc: 'distilled incident discussions', count: 2300, embedded: 2300 },
         { id: 'notion', label: 'Notion pages', desc: 'verbatim knowledge corpus, linked to source', count: 57, embedded: 57 },
+        { id: 'slack-corpus', label: 'Slack corpus', desc: 'all public channels, verbatim threads + daily digests', count: 4812, embedded: 4650 },
         { id: 'mesh', label: 'Mesh investigations', desc: 'the agent\u2019s own past reports (unverified)', count: 22, embedded: 22 },
         { id: 'learnings', label: 'Learnings', desc: 'accepted operational rules, injected by relevance', count: 7, embedded: 7 },
         { id: 'services', label: 'Services', desc: 'registry — what runs where, how to query it', count: 185 },
