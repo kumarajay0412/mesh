@@ -108,7 +108,13 @@ Then, inside the app:
 4. **Optional: code graphs** — `uv tool install graphifyy` and the next repos sync builds a queryable knowledge graph for every service-mapped repo (local tree-sitter AST — free, incremental). Sessions then answer structure questions ("what calls X?", "how does A reach B?") with one graph traversal instead of grepping, and cite the path as evidence. Not installed → everything degrades to `rg` exactly as before.
 5. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline; steer it mid-flight; approve or deny anything that wants to write.
 
-Packaging: `npm run dist` produces an installable DMG (arm64, unsigned — right-click → Open on first launch).
+### Packaging a DMG
+
+```bash
+npm run dist
+```
+
+Builds the renderer + main bundles and packages `release/Mesh-<version>-arm64.dmg` (unsigned — right-click → Open on first launch). Delete any old DMG from `release/` first if you're checking file dates to tell builds apart — electron-builder won't clean stale artifacts for you.
 
 ## Development
 
