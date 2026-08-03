@@ -13,6 +13,7 @@ import type { SyncProgressEvent } from '../../shared/types'
 import { settingsRepo } from '../db/repos/settings'
 import { syncStateRepo } from '../db/repos/syncState'
 import { expandHome, scanGitRepos } from './workspace'
+import { buildGraph, hasGraph, hasGraphify } from './graphify'
 import { log } from '../log'
 
 const l = log('repos:sync')
@@ -21,6 +22,9 @@ const exec = promisify(execFile)
 export const REPOS_SOURCE = 'repos'
 const CLONE_POOL = 3
 const FETCH_POOL = 8
+// Graph builds are CPU-bound tree-sitter parses — two at a time keeps the
+// machine responsive while the sync runs in the background.
+const GRAPH_POOL = 2
 
 async function run(cmd: string, args: string[], cwd?: string, timeoutMs = 120_000): Promise<string> {
   const { stdout } = await exec(cmd, args, { cwd, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 })
@@ -128,8 +132,30 @@ export async function syncRepos(deps: RepoSyncDeps, runId: string): Promise<void
       emit('fetch', done, total, `fetching (${Math.min(done - missing.length, local.length)}/${local.length})`)
     }
 
+    // Code graphs (graphify, optional): only for repos a registry service maps
+    // to — those are the ones investigations open. Local AST, no LLM, free;
+    // --update makes re-runs cheap. Missing CLI degrades silently to rg.
+    let graphsBuilt = 0
+    let graphNote = ''
+    if (await hasGraphify()) {
+      const serviceRepos = (deps.db.prepare('SELECT DISTINCT repo FROM services WHERE repo IS NOT NULL').all() as { repo: string }[])
+        .map((r) => r.repo)
+        .filter((name) => local.includes(name))
+      for (let i = 0; i < serviceRepos.length; i += GRAPH_POOL) {
+        const batch = serviceRepos.slice(i, i + GRAPH_POOL)
+        await Promise.all(batch.map(async (name) => {
+          if (await buildGraph(join(root, name))) graphsBuilt++
+        }))
+        emit('fetch', total, total, `graphs (${Math.min(i + batch.length, serviceRepos.length)}/${serviceRepos.length})`)
+      }
+      graphNote = ` · ${graphsBuilt} graph${graphsBuilt === 1 ? '' : 's'} indexed`
+    } else if (local.some((name) => hasGraph(join(root, name)))) {
+      // Graphs exist from an earlier install but the CLI is gone — stale.
+      graphNote = ' · graphify not on PATH (graphs stale)'
+    }
+
     states.finishRun(REPOS_SOURCE, 'idle')
-    emit('done', total, total, `${missing.length} cloned · ${local.length} fetched`)
+    emit('done', total, total, `${missing.length} cloned · ${local.length} fetched${graphNote}`)
   } catch (e) {
     states.finishRun(REPOS_SOURCE, 'error', (e as Error).message)
     emit('error', 0, undefined, (e as Error).message)

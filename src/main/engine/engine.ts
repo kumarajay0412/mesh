@@ -25,6 +25,7 @@ import { findIssueIdByIdentifier, postLinearComment } from '../sync/linear'
 import { runIntake } from './intake'
 import { buildMemoryMcp } from './memory-tools'
 import { buildDynamicContext, staticRunbook } from './runbook'
+import { availableGraphs } from '../repos/graphify'
 import { preCollect, formatBrief } from './precollect'
 import { formatReportComment } from './report-format'
 import { extractReport } from './report-schema'
@@ -169,7 +170,14 @@ export class Engine {
     let systemCached = staticRunbook()
     systemCached += `\n\n${mapRepo(db).promptText()}`
     if (repoNames.length > 0) {
-      systemCached += `\n\nREPOS AVAILABLE (read-only checkouts, cwd = ${repoRoot}):\n${repoNames.map((r) => `- ${r}/`).join('\n')}\nUse git log/blame/show and rg inside these to correlate symptoms to commits and name the exact file:line.`
+      // Repos with a graphify code graph are marked — for structure questions
+      // ("how does A reach B?") the graph beats grepping on both tokens and
+      // evidence quality, and its query commands are read-only auto-allowed.
+      const graphs = availableGraphs(repoRoot, repoNames)
+      systemCached += `\n\nREPOS AVAILABLE (read-only checkouts, cwd = ${repoRoot}):\n${repoNames.map((r) => `- ${r}/${graphs.has(r) ? ' · code graph ✓' : ''}`).join('\n')}\nUse git log/blame/show and rg inside these to correlate symptoms to commits and name the exact file:line.`
+      if (graphs.size > 0) {
+        systemCached += `\n\nCODE GRAPHS: repos marked "code graph ✓" have a queryable knowledge graph. For STRUCTURE questions (what calls X, how does A reach B, what is Y connected to) prefer the graph over grepping — it returns explained, confidence-tagged edges:\n  graphify query "<question>" --graph <repo>/graphify-out/graph.json\n  graphify path "<A>" "<B>" --graph <repo>/graphify-out/graph.json\n  graphify explain "<symbol>" --graph <repo>/graphify-out/graph.json\nThese are read-only and auto-allowed. Cite graph findings as evidence type "file" with the repo path as source. Fall back to rg for repos without a graph.`
+      }
     } else {
       systemCached += `\n\nNOTE: no repos found under ${repoRoot} — code-level pinpointing is degraded; say so in the report.`
     }

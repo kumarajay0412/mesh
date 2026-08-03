@@ -40,6 +40,9 @@ export function Connections() {
           <span className="font-mono text-[11px] text-subtle">
             workspace · {repos.count.toLocaleString('en-US')} git repos cloned for blame/log
             {repos.lastFetchedAt ? ` · fetched ${timeAgo(repos.lastFetchedAt)}` : ''}
+            {repos.graphify
+              ? ` · ${repos.graphs} code graph${repos.graphs === 1 ? '' : 's'}`
+              : ' · graphify not installed — code graphs off (uv tool install graphifyy)'}
           </span>
         </div>
       )}

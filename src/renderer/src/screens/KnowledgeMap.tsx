@@ -3,6 +3,7 @@ import type { MapEdge, MapNode, MapNodeKind } from '@shared/types'
 import { getApi } from '../lib/api'
 import { Button, Modal, Pill, TextArea } from '../components/ui'
 import { ContextPanel } from '../components/map/ContextPanel'
+import { CodeGraph } from '../components/map/CodeGraph'
 
 // Layered layout: data flows left → right, the way the org actually flows.
 const COLUMNS: MapNodeKind[][] = [['frontend'], ['edge'], ['backend'], ['ml'], ['external', 'datastore'], ['infra']]
@@ -112,6 +113,17 @@ export function KnowledgeMap() {
   const width = COLUMNS.length * COL_W + 60
   const height = Math.max(...[...placed.values()].map((p) => p.y + NODE_H), 400) + 40
 
+  const [tab, setTab] = useState<'system' | 'code'>('system')
+
+  if (tab === 'code') {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <MapHeader tab={tab} onTab={setTab} subtitle="Per-repo code knowledge graphs · built by graphify, queried by the agent" />
+        <CodeGraph />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -120,6 +132,7 @@ export function KnowledgeMap() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-subtle">System topology · rides in every agent prompt</div>
             <h1 className="font-display text-[19px] font-semibold tracking-tight text-txt">Knowledge map</h1>
           </div>
+          <TabSwitch tab={tab} onTab={setTab} />
           <div className="flex-1" />
           <Button variant="quiet" onClick={() => setContextOpen(true)}>
             What Mesh knows
@@ -346,6 +359,44 @@ export function KnowledgeMap() {
           </div>
         </Modal>
       )}
+    </div>
+  )
+}
+
+
+/** The two map surfaces share one sidebar entry; this is the switch. */
+function TabSwitch({ tab, onTab }: { tab: 'system' | 'code'; onTab: (t: 'system' | 'code') => void }) {
+  return (
+    <div className="ml-4 flex items-center gap-1">
+      {(
+        [
+          ['system', 'System map'],
+          ['code', 'Code graph'],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => onTab(id)}
+          className={`no-drag rounded-sm px-2.5 py-1 text-[12px] font-medium transition-colors ${tab === id ? 'text-txt' : 'text-subtle hover:text-muted'}`}
+          style={tab === id ? { boxShadow: 'inset 0 -2px 0 var(--ada-gold-400)' } : undefined}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MapHeader({ tab, onTab, subtitle }: { tab: 'system' | 'code'; onTab: (t: 'system' | 'code') => void; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-widest text-subtle">{subtitle}</div>
+        <h1 className="font-display text-[19px] font-semibold tracking-tight text-txt">Knowledge map</h1>
+      </div>
+      <TabSwitch tab={tab} onTab={onTab} />
+      <div className="flex-1" />
+      <span className="font-mono text-[11px] text-subtle">scroll = zoom · drag = pan · click a node</span>
     </div>
   )
 }

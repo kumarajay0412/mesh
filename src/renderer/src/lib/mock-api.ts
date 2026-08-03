@@ -710,7 +710,7 @@ export class MockApi implements MeshApi {
   async getContextSummary() {
     return {
       memory: { total: this.memory.length, bySource: { linear: 3, slack: 2, mesh: 1 }, embedded: this.memory.length - 1 },
-      repos: { count: 182, lastFetchedAt: now - 9 * min },
+      repos: { count: 182, lastFetchedAt: now - 9 * min, graphs: 12, graphify: true },
       stores: [
         { id: 'linear', label: 'Linear tickets', desc: 'distilled incidents — symptoms → root cause → fix', count: 3520, embedded: 3520 },
         { id: 'slack', label: 'Slack threads', desc: 'distilled incident discussions', count: 2300, embedded: 2300 },
@@ -766,6 +766,55 @@ export class MockApi implements MeshApi {
 
   async exportReportHtml() {
     return { path: null, error: 'export is only available in the Mesh desktop app' }
+  }
+
+  // A small deterministic fake code graph so the tab is designable in browser
+  // dev: 5 communities, hub-and-spoke with cross-links, INFERRED sprinkled in.
+  async listCodeGraphs() {
+    return [
+      { repo: 'payments-service', builtAt: now - 40 * min, sizeBytes: 2_400_000 },
+      { repo: 'search-api', builtAt: now - 42 * min, sizeBytes: 1_100_000 },
+      { repo: 'speech-orchestrator', builtAt: now - 45 * min, sizeBytes: 3_800_000 },
+    ]
+  }
+
+  async viewCodeGraph(repo: string, focus?: string) {
+    const communities = ['routing', 'settlement', 'persistence', 'clients', 'config']
+    const nodes: import('@shared/types').CodeGraphNode[] = []
+    const edges: import('@shared/types').CodeGraphEdge[] = []
+    communities.forEach((cname, c) => {
+      const hub = `${cname}Hub`
+      nodes.push({ id: hub, label: hub, community: c, communityName: cname, degree: 14, file: `src/${cname}/index.ts` })
+      for (let i = 0; i < 7; i++) {
+        const id = `${cname}_${i}`
+        nodes.push({ id, label: `${cname}${i > 3 ? 'Helper' : 'Service'}${i}`, community: c, communityName: cname, degree: 2 + ((i * 3) % 5), file: `src/${cname}/${i}.ts` })
+        edges.push({ source: hub, target: id, relation: i % 3 === 0 ? 'imports' : 'calls', confidence: i % 4 === 0 ? 'INFERRED' : 'EXTRACTED' })
+      }
+    })
+    // Numeric-only communities, like real graphify --code-only output (it
+    // numbers communities but never names them; the tab derives names from
+    // the dominant source dir). Enough of them to overflow the 8 color slots.
+    const numbered = ['ingest', 'billing', 'auth', 'metrics', 'webhooks']
+    numbered.forEach((dir, k) => {
+      const c = communities.length + k
+      const hub = `${dir}_main`
+      nodes.push({ id: hub, label: `${dir}Main`, community: c, degree: 6, file: `${dir}/main.go` })
+      for (let i = 0; i < 2; i++) {
+        const id = `${dir}_${i}`
+        nodes.push({ id, label: `${dir}Worker${i}`, community: c, degree: 1, file: `${dir}/worker_${i}.go` })
+        edges.push({ source: hub, target: id, relation: 'contains', confidence: 'EXTRACTED' })
+      }
+    })
+    // cross-community spine — the paths investigations care about
+    edges.push({ source: 'routingHub', target: 'settlementHub', relation: 'calls', confidence: 'EXTRACTED' })
+    edges.push({ source: 'settlementHub', target: 'persistenceHub', relation: 'calls', confidence: 'EXTRACTED' })
+    edges.push({ source: 'settlementHub', target: 'clientsHub', relation: 'uses', confidence: 'INFERRED' })
+    edges.push({ source: 'clientsHub', target: 'config_1', relation: 'imports', confidence: 'EXTRACTED' })
+    edges.push({ source: 'ingest_main', target: 'persistenceHub', relation: 'calls', confidence: 'EXTRACTED' })
+
+    const f = focus?.trim().toLowerCase()
+    const focusIds = f ? nodes.filter((n) => n.label.toLowerCase().includes(f)).slice(0, 5).map((n) => n.id) : []
+    return { repo, nodes, edges, focusIds, totals: { nodes: 1240, edges: 3187, communities: 12 }, truncated: true }
   }
 
   async getClaudeAuth() {

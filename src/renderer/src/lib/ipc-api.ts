@@ -149,6 +149,12 @@ export class IpcApi implements MeshApi {
   openExternal(url: string) {
     return invoke('app:openExternal', { url })
   }
+  listCodeGraphs() {
+    return invoke('graph:list', undefined)
+  }
+  viewCodeGraph(repo: string, focus?: string, limit?: number) {
+    return invoke('graph:view', { repo, focus, limit })
+  }
   exportReportHtml(id: string) {
     return invoke('report:exportHtml', { id })
   }

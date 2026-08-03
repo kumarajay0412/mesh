@@ -41,10 +41,19 @@ function isReadOnlyKubectl(cmd: string): boolean {
   return KUBECTL_READ_VERBS.has(verb)
 }
 
+// graphify read verbs query graph.json and mutate nothing. Everything else —
+// extract (writes graphify-out/), install, hook, uninstall — stays gated:
+// graphs are built by the repos SYNC, never silently by a session.
+const GRAPHIFY_READ_VERBS = new Set(['query', 'path', 'explain', '--version'])
+
 export function isReadOnlyCommand(command: string): boolean {
   const cmd = command.trim()
   if (SMUGGLING.test(cmd)) return false
   if (cmd.startsWith('kubectl')) return isReadOnlyKubectl(cmd)
+  if (cmd.startsWith('graphify')) {
+    const verb = cmd.split(/\s+/)[1]
+    return GRAPHIFY_READ_VERBS.has(verb)
+  }
   return READ_ONLY_PATTERNS.some((p) => p.test(cmd))
 }
 

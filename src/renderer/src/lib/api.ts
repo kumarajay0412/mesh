@@ -2,6 +2,8 @@ import type {
   AgentEvent,
   ContextSummary,
   ClaudeAuth,
+  CodeGraphRepo,
+  CodeGraphViewData,
   K8sStatus,
   PtyExit,
   PtySpawnRequest,
@@ -90,6 +92,10 @@ export interface MeshApi {
   getClaudeAuth(): Promise<ClaudeAuth>
   /** open a URL in the real browser (http/https only, enforced in main) */
   openExternal(url: string): Promise<{ ok: boolean; error?: string }>
+
+  // code graphs (graphify) — trimmed views computed in main
+  listCodeGraphs(): Promise<CodeGraphRepo[]>
+  viewCodeGraph(repo: string, focus?: string, limit?: number): Promise<CodeGraphViewData | { error: string }>
   /** save the report as a self-contained HTML file; null path = cancelled */
   exportReportHtml(id: string): Promise<{ path: string | null; error?: string }>
 

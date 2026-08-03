@@ -16,7 +16,8 @@ import { runSync, knownSources, type SyncDeps } from './sync'
 import { startScheduler } from './sync/scheduler'
 import { setDockIcon } from './dock-icon'
 import { applyStaticPathExtras, resolveShellPath } from './shell-path'
-import { discoverServices } from './registry/discovery'
+import { discoverServices, shouldRunBootDiscovery } from './registry/discovery'
+import { expandHome, scanGitRepos } from './repos/workspace'
 import { servicesRepo } from './db/repos/services'
 import { log } from './log'
 
@@ -56,6 +57,11 @@ app.on('second-instance', () => {
 // asdf) are found too — otherwise Mesh reports them as "not installed".
 applyStaticPathExtras()
 
+// Graphify (optional code-graph tooling) logs every query to a local file by
+// default. Investigation queries are incident data — keep them out of even
+// local side-channels. Inherited by sessions and sync builds alike.
+process.env.GRAPHIFY_QUERY_LOG_DISABLE = '1'
+
 let win: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -92,9 +98,12 @@ app.whenReady().then(() => {
   const events = eventsRepo(db)
   syncStateRepo(db).resetStale() // crash recovery: a killed run must not wedge the scheduler
 
-  // Self-populating registry: when it's empty but Grafana is connected,
-  // run discovery at boot — no button required on first setup.
-  if (servicesRepo(db).list().length === 0) {
+  // Self-populating registry: run discovery at boot when it's empty (first
+  // setup) — or when nothing maps to a repo despite local clones existing,
+  // which means discovery last ran before repoRoot was set and the mapping
+  // never healed (see shouldRunBootDiscovery).
+  const localRepoCount = scanGitRepos(expandHome(settings.get().repoRoot)).length
+  if (shouldRunBootDiscovery(servicesRepo(db).list(), localRepoCount)) {
     void discoverServices(db, secrets).then((r) => {
       if (r.discovered > 0) l.info(`boot discovery: ${r.discovered} services, ${r.matchedToRepos} matched to repos`)
       for (const i of r.instances) if (i.error) l.warn(`boot discovery ${i.name}: ${i.error}`)

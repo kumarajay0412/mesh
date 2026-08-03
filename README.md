@@ -11,7 +11,7 @@ Everything runs on your machine, on your own accounts. There is no hosted servic
 ## What it does
 
 - **Builds a searchable org memory, two pipelines** — *incident* sources (Linear tickets with comment threads, your chosen Slack incident/RCA channels) are LLM-distilled into structured fields (symptoms · root cause · resolution · error signature); *corpus* sources (every shared Notion page, and — opt-in — **every public Slack channel**) are stored verbatim at zero LLM cost, each hit linking back to its page or thread. Everything is indexed three ways: exact error-signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model. "Staff can't open the dashboard" finds "site can't be reached" with zero shared words.
-- **Runs real investigations** — spawns a Claude Code session (via *your* Claude login — the Agent SDK, no API key of Mesh's own) inside your local repo checkouts, primed with a versioned SRE runbook, the similar past incidents, your service registry, and your system topology. The session is **read-only by default**: git log/blame, ripgrep, kubectl reads, live Sentry MCP tools, and mid-run memory search.
+- **Runs real investigations** — spawns a Claude Code session (via *your* Claude login — the Agent SDK, no API key of Mesh's own) inside your local repo checkouts, primed with a versioned SRE runbook, the similar past incidents, your service registry, and your system topology. The session is **read-only by default**: git log/blame, ripgrep, kubectl reads, live Sentry MCP tools, mid-run memory search — and, when [graphify](https://github.com/Graphify-Labs/graphify) is installed, **per-repo code knowledge graphs**: "how does checkout reach settlement.ts" is answered by one `graphify path` traversal with confidence-tagged edges instead of a grep expedition. Graphs are built locally by deterministic AST parsing (no LLM, nothing leaves the machine) during the background repos sync, never by the session itself.
 - **Names culprits with evidence** — reports carry a confidence tier, a culprit `repo/sha/path`, ranked suspects, a structured root-cause story (numbered points, per-service verdicts, measured charts, red herrings, honest unknowns), and an evidence chain where **every claim cites its query, command output, or commit**. A claim without a source doesn't ship.
 - **Gates every write behind you** — any mutating action pops an approval modal (deny by default, 10-minute timeout = deny, deny-all on window close). Posting the report to Linear, opening a fix session in your terminal — all explicit approvals, all audited.
 - **Gets smarter with your sign-off** — each report proposes reusable learnings and knowledge-map edges it *verified during the run*. You accept or dismiss; only accepted items ever ride in future prompts. Finished investigations are written back into memory, so the next similar incident starts from this one's answer.
@@ -36,7 +36,7 @@ flowchart LR
         DIST["incident pipeline<br/>LLM distill →<br/>symptoms · root cause · fix ·<br/>error signature"]
         CORP["corpus pipeline<br/>verbatim text, no LLM —<br/>free per page"]
         DISC["service discovery"]
-        FETCH["git fetch on schedule"]
+        FETCH["git fetch on schedule<br/>+ code graphs (graphify, optional —<br/>local AST, no LLM)"]
     end
 
     subgraph brain["mesh.db — one local SQLite file"]
@@ -44,7 +44,7 @@ flowchart LR
         REG[("service registry")]
         MAP[("knowledge map<br/>who calls whom")]
         LRN[("learnings<br/>user-approved rules")]
-        REPOS[("local checkouts")]
+        REPOS[("local checkouts<br/>+ per-repo code graphs")]
     end
 
     LIN --> DIST
@@ -72,6 +72,7 @@ flowchart TB
     CTX --> SESSION["Claude Code session — your login<br/>read-only command gate, deny by default"]
 
     SESSION -->|"git log / blame · rg"| REPOS2["local repo checkouts"]
+    SESSION -->|"graphify query · path · explain"| CG["code knowledge graphs<br/>(per repo, confidence-tagged edges)"]
     SESSION -->|"kubectl (read-only, per-service context)"| K8S["GKE / AKS clusters"]
     SESSION -->|"live MCP tools"| SENTRY["Sentry issues · events"]
     SESSION -->|"search_memory · get_incident"| MEM2[("org memory<br/>incl. Notion docs + URLs")]
@@ -104,7 +105,8 @@ Then, inside the app:
 1. **Connections** — add your Grafana instance(s) (read-scoped token; service discovery reads your Loki labels and drafts a service registry mapped to your local repos), your Linear API key, Slack (paste a token, *pick* your incident/RCA channels from a live list, and optionally flip **Index all public channels** for the verbatim corpus — a user token reads channels without invites), Notion (share pages with the integration; they ingest verbatim with backlinks), and optionally Sentry (the agent gets live issue/event/trace tools). Every dialog carries a step-by-step token guide, and each card reports what actually arrived — counts, sync recency, and zero-yield states that say why.
 2. **Memory → Refresh** — first run is the backfill; every run after is incremental via per-source cursors. Sync is crash-safe: cursors only advance after a complete walk, and re-walks are absorbed idempotently.
 3. **Knowledge map → Seed from description** — paste a plain-language description of your system (or an architecture doc); one cheap model call extracts services and who-calls-whom into an editable map. Mesh ships knowing nothing about anyone's org — this is where *yours* comes in. Investigations propose additions from then on.
-4. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline; steer it mid-flight; approve or deny anything that wants to write.
+4. **Optional: code graphs** — `uv tool install graphifyy` and the next repos sync builds a queryable knowledge graph for every service-mapped repo (local tree-sitter AST — free, incremental). Sessions then answer structure questions ("what calls X?", "how does A reach B?") with one graph traversal instead of grepping, and cite the path as evidence. Not installed → everything degrades to `rg` exactly as before.
+5. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline; steer it mid-flight; approve or deny anything that wants to write.
 
 Packaging: `npm run dist` produces an installable DMG (arm64, unsigned — right-click → Open on first launch).
 

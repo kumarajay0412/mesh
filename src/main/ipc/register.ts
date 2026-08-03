@@ -27,6 +27,9 @@ import { searchMemory } from '../memory/search'
 import { runSync, knownSources, type SyncDeps } from '../sync'
 import { listChannels, friendlySlackError } from '../sync/slack'
 import { EXTRACT_SYSTEM, parseMapExtraction } from '../registry/map-extract'
+import { graphJsonPath, hasGraph, hasGraphify } from '../repos/graphify'
+import { loadGraph, selectSubgraph } from '../repos/graph-view'
+import { statSync } from 'node:fs'
 
 /** typed ipcMain.handle */
 function handle<K extends keyof Invokes>(channel: K, fn: (args: Invokes[K]['args']) => Promise<Invokes[K]['result']> | Invokes[K]['result']): void {
@@ -321,6 +324,33 @@ export function registerIpc(deps: RegisterDeps): void {
     return { ok: true }
   })
 
+  // Code graph tab: list repos with graphs, serve trimmed views. Read-only over
+  // files the repos sync already built; the raw graph never crosses IPC.
+  handle('graph:list', () => {
+    const rows = db.prepare('SELECT name, path FROM repos WHERE path IS NOT NULL ORDER BY name').all() as { name: string; path: string }[]
+    const out = []
+    for (const r of rows) {
+      if (!hasGraph(r.path)) continue
+      try {
+        const st = statSync(graphJsonPath(r.path))
+        out.push({ repo: r.name, builtAt: st.mtimeMs, sizeBytes: st.size })
+      } catch {
+        /* raced a rebuild — skip */
+      }
+    }
+    return out
+  })
+  handle('graph:view', ({ repo, focus, limit }) => {
+    const row = db.prepare('SELECT path FROM repos WHERE name = ?').get(repo) as { path: string } | undefined
+    if (!row?.path || !hasGraph(row.path)) return { error: `no graph for ${repo} — run a repos sync with graphify installed` }
+    try {
+      const g = loadGraph(graphJsonPath(row.path))
+      return { repo, ...selectSubgraph(g, { focus, limit }) }
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+  })
+
   handle('claude:auth', () => claudeAuth())
 
   // Embedded terminal. Every one of these is reached only from a renderer user
@@ -339,13 +369,15 @@ export function registerIpc(deps: RegisterDeps): void {
 
   // "What Mesh knows" — totals for every inferred store, plus the exact
   // text that rides in prompts. Read-only aggregation; nothing cached.
-  handle('context:summary', () => {
+  handle('context:summary', async () => {
     const bySourceRows = db.prepare('SELECT source, COUNT(*) c FROM memory GROUP BY source').all() as { source: string; c: number }[]
     const embedded = (db.prepare('SELECT COUNT(*) c FROM memory WHERE embedded = 1').get() as { c: number }).c
     const manual = (db.prepare(`SELECT COUNT(*) c FROM services WHERE source = 'manual'`).get() as { c: number }).c
     const edges = map.edges()
     const accepted = learnings.list('accepted')
     const repoRow = db.prepare('SELECT COUNT(*) c, MAX(last_fetched_at) m FROM repos').get() as { c: number; m: number | null }
+    const repoPaths = (db.prepare('SELECT path FROM repos WHERE path IS NOT NULL').all() as { path: string }[]).map((r) => r.path)
+    const graphs = repoPaths.filter((p) => hasGraph(p)).length
     // Per-store counters — memory sources split by pipeline (distilled incident
     // vs verbatim corpus), then the derived stores. Embedded counts come from
     // the same GROUP BY so the tiles show indexing progress during a drain.
@@ -378,7 +410,7 @@ export function registerIpc(deps: RegisterDeps): void {
         bySource: Object.fromEntries(bySourceRows.map((r) => [r.source, r.c])),
         embedded,
       },
-      repos: { count: repoRow.c, lastFetchedAt: repoRow.m ?? undefined },
+      repos: { count: repoRow.c, lastFetchedAt: repoRow.m ?? undefined, graphs, graphify: await hasGraphify() },
       registry: { total: services.list().length, manual },
       map: {
         nodes: map.nodes().length,

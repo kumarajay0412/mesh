@@ -4,6 +4,8 @@ import type {
   AgentEvent,
   ContextSummary,
   ClaudeAuth,
+  CodeGraphRepo,
+  CodeGraphViewData,
   K8sStatus,
   PtyExit,
   PtySpawnRequest,
@@ -86,6 +88,12 @@ export interface Invokes {
   /** Open a URL in the user's real browser. http/https only — see the
    *  handler; shell.openExternal on an arbitrary scheme is an escape vector. */
   'app:openExternal': { args: { url: string }; result: { ok: boolean; error?: string } }
+
+  /** Repos with a built graphify code graph — for the Code graph tab. */
+  'graph:list': { args: void; result: CodeGraphRepo[] }
+  /** A trimmed view of one repo's graph: top-N by degree, or a neighborhood
+   *  around `focus`. Parsing and trimming happen in main — never the renderer. */
+  'graph:view': { args: { repo: string; focus?: string; limit?: number }; result: CodeGraphViewData | { error: string } }
 
   /** Is the `claude` CLI Mesh runs on signed in? */
   'claude:auth': { args: void; result: ClaudeAuth }

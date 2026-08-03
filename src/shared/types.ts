@@ -418,12 +418,53 @@ export interface KnowledgeStore {
   embedded?: number
 }
 
+/* ------------------------------------------------------------ code graphs -- */
+
+/** One node of a graphify code graph, trimmed for display. */
+export interface CodeGraphNode {
+  id: string
+  label: string
+  community?: number
+  communityName?: string
+  degree: number
+  /** source file, when the graph carries it */
+  file?: string
+}
+
+export interface CodeGraphEdge {
+  source: string
+  target: string
+  relation?: string
+  /** EXTRACTED = explicit in source · INFERRED = resolved by graphify */
+  confidence?: 'EXTRACTED' | 'INFERRED'
+}
+
+/** A repo that has a built graph.json. */
+export interface CodeGraphRepo {
+  repo: string
+  builtAt: number
+  sizeBytes: number
+}
+
+/** A trimmed, renderable view of one repo's code graph — top-N by degree, or
+ *  a BFS neighborhood around the focus matches. Never the full graph. */
+export interface CodeGraphViewData {
+  repo: string
+  nodes: CodeGraphNode[]
+  edges: CodeGraphEdge[]
+  /** ids of the nodes the focus query matched (highlighted) */
+  focusIds: string[]
+  totals: { nodes: number; edges: number; communities: number }
+  builtAtCommit?: string
+  truncated: boolean
+}
+
 /** Everything Mesh has inferred so far — the transparency view behind the
  *  Knowledge Map's "What Mesh knows" panel. */
 export interface ContextSummary {
   memory: { total: number; bySource: Record<string, number>; embedded: number }
   /** local git checkouts kept fresh for the agent's blame/log reads */
-  repos: { count: number; lastFetchedAt?: number }
+  repos: { count: number; lastFetchedAt?: number; graphs: number; graphify: boolean }
   /** one tile per knowledge store: what it is, how many rows, how indexed */
   stores: KnowledgeStore[]
   registry: { total: number; manual: number }

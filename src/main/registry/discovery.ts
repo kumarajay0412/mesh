@@ -87,6 +87,21 @@ export function matchRepo(service: string, repos: string[]): string | undefined 
   )
 }
 
+/** Should boot run discovery without being asked?
+ *
+ *  Two states qualify:
+ *  · empty registry — first setup, nothing to show yet
+ *  · populated registry where NOTHING maps to a repo even though local clones
+ *    exist. That is not a plausible steady state (infra pods never map, but
+ *    every org has *some* service named after its repo) — it means discovery
+ *    last ran before repoRoot was set (e.g. right after a DB wipe) and matched
+ *    against an empty repo list. Re-running heals the mapping; without this the
+ *    zero-mapping state is permanent, and repo syncs silently build no graphs. */
+export function shouldRunBootDiscovery(entries: { repo?: string }[], localRepoCount: number): boolean {
+  if (entries.length === 0) return true
+  return localRepoCount > 0 && entries.every((s) => !s.repo)
+}
+
 export async function discoverServices(db: Database, secrets: SecretStore): Promise<DiscoveryResult> {
   const services = servicesRepo(db)
   const repoRoot = expandHome(settingsRepo(db).get().repoRoot)

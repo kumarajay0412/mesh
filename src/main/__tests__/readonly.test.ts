@@ -82,3 +82,26 @@ describe('kubectl read-only classification (Phase 2 — context/namespace flags)
     expect(isReadOnlyCommand('kubectl get pods | tee /etc/x')).toBe(false)
   })
 })
+
+describe('graphify gate', () => {
+  it('auto-allows the read verbs — query, path, explain, --version', () => {
+    expect(isReadOnlyCommand('graphify query "what connects auth to the db?" --graph payments/graphify-out/graph.json')).toBe(true)
+    expect(isReadOnlyCommand('graphify path "CheckoutHandler" "SettleClient" --graph x/graphify-out/graph.json')).toBe(true)
+    expect(isReadOnlyCommand('graphify explain "RateLimiter"')).toBe(true)
+    expect(isReadOnlyCommand('graphify --version')).toBe(true)
+  })
+
+  it('gates everything that writes — extract, install, hooks, uninstall', () => {
+    // Graphs are built by the repos sync; a session must never build silently.
+    expect(isReadOnlyCommand('graphify extract . --code-only')).toBe(false)
+    expect(isReadOnlyCommand('graphify install')).toBe(false)
+    expect(isReadOnlyCommand('graphify hook install')).toBe(false)
+    expect(isReadOnlyCommand('graphify uninstall --purge')).toBe(false)
+    expect(isReadOnlyCommand('graphify claude install')).toBe(false)
+  })
+
+  it('still blocks smuggling around a read verb', () => {
+    expect(isReadOnlyCommand('graphify query "x" && rm -rf /')).toBe(false)
+    expect(isReadOnlyCommand('graphify explain "y" > /etc/passwd')).toBe(false)
+  })
+})
