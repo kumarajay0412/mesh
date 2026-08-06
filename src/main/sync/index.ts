@@ -10,7 +10,7 @@ import { syncStateRepo } from '../db/repos/syncState'
 import { slackThreadsRepo } from '../db/repos/slackThreads'
 import type { SecretStore } from '../security/secrets'
 import { fetchLinearSince } from './linear'
-import { fetchSlackSince } from './slack'
+import { fetchSlackSince, friendlySlackError } from './slack'
 import { fetchSlackCorpus, slackApi } from './slack-corpus'
 import { fetchNotionSince, notionWhoAmI } from './notion'
 import { linkIncidents } from './link'
@@ -130,8 +130,9 @@ async function syncOne(deps: SyncDeps, runId: string, source: string): Promise<v
       states.finishRun(source, 'idle')
       emit('done', ingested, ingested)
     } catch (e) {
-      states.finishRun(source, 'error', (e as Error).message)
-      emit('error', ingested, undefined, (e as Error).message)
+      const friendly = friendlySlackError(e)
+      states.finishRun(source, 'error', friendly)
+      emit('error', ingested, undefined, friendly)
     }
     return
   }
@@ -173,8 +174,9 @@ async function syncOne(deps: SyncDeps, runId: string, source: string): Promise<v
       states.finishRun(source, 'idle', note)
       emit('done', ingested, ingested, note)
     } catch (e) {
-      states.finishRun(source, 'error', (e as Error).message)
-      emit('error', ingested, undefined, (e as Error).message)
+      const friendly = friendlySlackError(e)
+      states.finishRun(source, 'error', friendly)
+      emit('error', ingested, undefined, friendly)
     }
     return
   }

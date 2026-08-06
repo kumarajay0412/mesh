@@ -160,6 +160,10 @@ export function friendlySlackError(e: unknown): string {
     account_inactive: 'token revoked, or the account was deactivated',
     token_revoked: 'token was revoked',
     missing_scope: 'token is missing the channels:read scope',
+    // Slack only serves history to members — public isn't enough.
+    not_in_channel: 'not a member of this channel — /invite the app in Slack (or join it yourself, for a user token)',
+    channel_not_found: 'channel not found — renamed or archived? re-pick it in Connections',
+    ratelimited: 'Slack rate limit hit — will catch up on the next sync',
   }
   if (code) return known[code] ?? code
   return (e as Error)?.message ?? 'unknown error'

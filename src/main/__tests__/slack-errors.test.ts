@@ -8,8 +8,14 @@ describe('friendlySlackError', () => {
     expect(friendlySlackError({ data: { error: 'account_inactive' } })).toBe('token revoked, or the account was deactivated')
   })
 
+  it('explains membership errors with the action to take', () => {
+    // the exact failure a public-but-not-joined channel produces
+    expect(friendlySlackError({ data: { error: 'not_in_channel' } })).toMatch(/\/invite/)
+    expect(friendlySlackError({ data: { error: 'channel_not_found' } })).toMatch(/re-pick/)
+  })
+
   it('falls back to the raw code for unrecognized platform errors', () => {
-    expect(friendlySlackError({ data: { error: 'ratelimited' } })).toBe('ratelimited')
+    expect(friendlySlackError({ data: { error: 'fatal_error' } })).toBe('fatal_error')
   })
 
   it('falls back to the error message when there is no platform error code', () => {
