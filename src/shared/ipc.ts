@@ -19,6 +19,8 @@ import type {
   MapNode,
   MemorySearchResult,
   ModelStatus,
+  PackExportResult,
+  PackImportResult,
   ServiceEntry,
   SettingsState,
   SourceId,
@@ -88,6 +90,12 @@ export interface Invokes {
   /** Open a URL in the user's real browser. http/https only — see the
    *  handler; shell.openExternal on an arbitrary scheme is an escape vector. */
   'app:openExternal': { args: { url: string }; result: { ok: boolean; error?: string } }
+
+  /** Team hand-off: everything Mesh knows in one offline .meshpack file.
+   *  Tokens ride only when a passphrase is set (sealed with it); import
+   *  merges without clobbering local decisions. */
+  'pack:export': { args: { passphrase?: string }; result: PackExportResult }
+  'pack:import': { args: { passphrase?: string }; result: PackImportResult }
 
   /** Repos with a built graphify code graph — for the Code graph tab. */
   'graph:list': { args: void; result: CodeGraphRepo[] }

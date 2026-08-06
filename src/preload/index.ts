@@ -34,6 +34,8 @@ const INVOKE_CHANNELS: InvokeChannel[] = [
   'claude:auth',
   'report:exportHtml',
   'app:openExternal',
+  'pack:export',
+  'pack:import',
   'graph:list',
   'graph:view',
   'pty:spawn',

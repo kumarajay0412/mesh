@@ -134,6 +134,8 @@ export function Settings() {
           </Row>
         </Group>
 
+        <TeamPack />
+
         <Group label="Workspace">
           <Row title="Repo folder" desc={settings.repoRoot}>
             <div className="flex items-center gap-2.5">
@@ -153,6 +155,85 @@ export function Settings() {
         </Group>
       </div>
     </div>
+  )
+}
+
+/** Team hand-off: everything Mesh knows as one offline file. Tokens travel
+ *  only passphrase-sealed — and they are YOUR tokens: whoever imports them
+ *  acts as you on Linear/Slack/Notion. The copy says so. */
+function TeamPack() {
+  const [passphrase, setPassphrase] = useState('')
+  const [busy, setBusy] = useState<'export' | 'import' | null>(null)
+  const [result, setResult] = useState<string | null>(null)
+  const [warn, setWarn] = useState<string[]>([])
+
+  const doExport = async () => {
+    setBusy('export')
+    setResult(null)
+    setWarn([])
+    const api = await getApi()
+    const r = await api.exportPack(passphrase || undefined)
+    setBusy(null)
+    if (r.error) setResult(`export failed: ${r.error}`)
+    else if (r.path) {
+      const rows = Object.values(r.counts ?? {}).reduce((s, n) => s + n, 0)
+      setResult(
+        `wrote ${r.path.split('/').pop()} · ${rows.toLocaleString('en-US')} rows · ${r.vectors?.toLocaleString('en-US')} vectors · ` +
+          `${((r.sizeBytes ?? 0) / 1e6).toFixed(1)}MB · tokens ${r.secretsIncluded ? 'sealed in' : 'NOT included (no passphrase)'}`,
+      )
+    }
+  }
+
+  const doImport = async () => {
+    setBusy('import')
+    setResult(null)
+    setWarn([])
+    const api = await getApi()
+    const r = await api.importPack(passphrase || undefined)
+    setBusy(null)
+    if (r.error) setResult(`import failed: ${r.error}`)
+    else if (r.path && r.report) {
+      const applied = Object.values(r.report.counts).reduce((s, c) => s + c.applied, 0)
+      const skipped = Object.values(r.report.counts).reduce((s, c) => s + c.skipped, 0)
+      setResult(
+        `imported ${applied.toLocaleString('en-US')} rows (${skipped} kept local) · ${r.report.vectors.applied.toLocaleString('en-US')} vectors · ` +
+          `${r.report.secrets.applied} tokens added, ${r.report.secrets.skipped} already set`,
+      )
+      setWarn(r.report.warnings)
+    }
+  }
+
+  return (
+    <Group label="Team hand-off">
+      <Row title="One-file export / import" desc="Everything Mesh has learned — distilled incidents with embeddings, investigations, learnings, map, registry, cursors — as a single offline .meshpack. Merge-import: local decisions and existing tokens are never overwritten.">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" disabled={busy !== null} onClick={() => void doExport()}>
+            {busy === 'export' ? 'Exporting…' : 'Export…'}
+          </Button>
+          <Button variant="ghost" disabled={busy !== null} onClick={() => void doImport()}>
+            {busy === 'import' ? 'Importing…' : 'Import…'}
+          </Button>
+        </div>
+      </Row>
+      <Row title="Passphrase" desc="Set one to seal your API tokens into the export (scrypt + AES-256-GCM), or to unseal on import. Leave empty to move data only. Sharing tokens = the recipient acts as YOU on Linear/Slack/Notion — prefer teammates minting their own.">
+        <input
+          type="password"
+          className="no-drag w-[200px] rounded-sm border border-line bg-[color:var(--ada-field-bg)] px-2.5 py-1.5 text-right font-mono text-[12px] text-txt placeholder:text-subtle outline-none focus:border-gold-600"
+          placeholder="optional"
+          value={passphrase}
+          onChange={(e) => setPassphrase(e.target.value)}
+          autoComplete="off"
+        />
+      </Row>
+      {(result || warn.length > 0) && (
+        <div className="px-4 py-3 font-mono text-[11.5px] leading-relaxed">
+          {result && <div className="text-muted">{result}</div>}
+          {warn.map((w) => (
+            <div key={w} className="text-[color:var(--ada-warn,#c98500)]">⚠ {w}</div>
+          ))}
+        </div>
+      )}
+    </Group>
   )
 }
 

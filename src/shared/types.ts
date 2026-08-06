@@ -418,6 +418,33 @@ export interface KnowledgeStore {
   embedded?: number
 }
 
+/* -------------------------------------------------------------- team pack -- */
+
+/** What a .meshpack import actually did, table by table. */
+export interface PackImportReport {
+  counts: Record<string, { applied: number; skipped: number }>
+  vectors: { applied: number; skipped: number }
+  secrets: { applied: number; skipped: number }
+  warnings: string[]
+}
+
+export interface PackExportResult {
+  path: string | null
+  /** rows per table that went into the file */
+  counts?: Record<string, number>
+  vectors?: number
+  /** true only when a passphrase was set and tokens were sealed in */
+  secretsIncluded?: boolean
+  sizeBytes?: number
+  error?: string
+}
+
+export interface PackImportResult {
+  path: string | null
+  report?: PackImportReport
+  error?: string
+}
+
 /* ------------------------------------------------------------ code graphs -- */
 
 /** One node of a graphify code graph, trimmed for display. */

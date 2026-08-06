@@ -817,6 +817,30 @@ export class MockApi implements MeshApi {
     return { repo, nodes, edges, focusIds, totals: { nodes: 1240, edges: 3187, communities: 12 }, truncated: true }
   }
 
+  async exportPack(passphrase?: string) {
+    await new Promise((r) => setTimeout(r, 600))
+    return {
+      path: '/Users/you/Desktop/mesh-2026-08-03.meshpack',
+      counts: { memory: 4278, investigations: 6, events: 708, learnings: 25, services: 187, map_nodes: 16, map_edges: 15, sync_state: 5, settings: 2 },
+      vectors: 4223,
+      secretsIncluded: Boolean(passphrase),
+      sizeBytes: 9_400_000,
+    }
+  }
+
+  async importPack(passphrase?: string) {
+    await new Promise((r) => setTimeout(r, 900))
+    return {
+      path: '/Users/you/Desktop/mesh-2026-08-03.meshpack',
+      report: {
+        counts: { memory: { applied: 4278, skipped: 0 }, investigations: { applied: 6, skipped: 0 }, events: { applied: 708, skipped: 0 }, learnings: { applied: 25, skipped: 0 }, services: { applied: 185, skipped: 2 } },
+        vectors: { applied: 4223, skipped: 0 },
+        secrets: passphrase ? { applied: 8, skipped: 0 } : { applied: 0, skipped: 0 },
+        warnings: passphrase ? [] : ['pack contains tokens but no passphrase was given — tokens not imported'],
+      },
+    }
+  }
+
   async getClaudeAuth() {
     return { installed: true, loggedIn: false as boolean, authMethod: 'claude.ai', subscriptionType: 'max' }
   }

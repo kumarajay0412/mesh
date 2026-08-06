@@ -158,6 +158,12 @@ export class IpcApi implements MeshApi {
   exportReportHtml(id: string) {
     return invoke('report:exportHtml', { id })
   }
+  exportPack(passphrase?: string) {
+    return invoke('pack:export', { passphrase })
+  }
+  importPack(passphrase?: string) {
+    return invoke('pack:import', { passphrase })
+  }
 
   ptySpawn(req: import('@shared/types').PtySpawnRequest) {
     return invoke('pty:spawn', req)

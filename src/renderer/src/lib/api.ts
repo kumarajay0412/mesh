@@ -18,6 +18,8 @@ import type {
   MapNode,
   MemorySearchResult,
   ModelStatus,
+  PackExportResult,
+  PackImportResult,
   ServiceEntry,
   SettingsState,
   SourceId,
@@ -98,6 +100,10 @@ export interface MeshApi {
   viewCodeGraph(repo: string, focus?: string, limit?: number): Promise<CodeGraphViewData | { error: string }>
   /** save the report as a self-contained HTML file; null path = cancelled */
   exportReportHtml(id: string): Promise<{ path: string | null; error?: string }>
+
+  // team hand-off: one offline .meshpack; tokens only travel passphrase-sealed
+  exportPack(passphrase?: string): Promise<PackExportResult>
+  importPack(passphrase?: string): Promise<PackImportResult>
 
   // embedded terminal (user-driven only — never exposed to the agent)
   ptySpawn(req: PtySpawnRequest): Promise<{ id: string } | { error: string }>

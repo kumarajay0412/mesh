@@ -48,6 +48,11 @@ export function secretStore(db: Database) {
       return repo.has(id) && this.get(id) === null
     },
 
+    /** every stored secret id — for the team-pack export */
+    ids(): string[] {
+      return repo.ids()
+    },
+
     /** which sources have at least one stored field, e.g. { grafana: true } */
     presence(): Record<string, boolean> {
       const out: Record<string, boolean> = {}

@@ -1,6 +1,6 @@
 // Registers every Invokes handler — the typed seam between renderer and main.
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { expandHome, scanGitRepos } from '../repos/workspace'
 import type { Database } from 'better-sqlite3'
 import type { Invokes, MainEvents } from '../../shared/ipc'
@@ -29,6 +29,7 @@ import { listChannels, friendlySlackError } from '../sync/slack'
 import { EXTRACT_SYSTEM, parseMapExtraction } from '../registry/map-extract'
 import { graphJsonPath, hasGraph, hasGraphify } from '../repos/graphify'
 import { loadGraph, selectSubgraph } from '../repos/graph-view'
+import { applyPack, buildPack, decodePack, encodePack } from '../pack/pack'
 import { statSync } from 'node:fs'
 
 /** typed ipcMain.handle */
@@ -348,6 +349,63 @@ export function registerIpc(deps: RegisterDeps): void {
       return { repo, ...selectSubgraph(g, { focus, limit }) }
     } catch (e) {
       return { error: (e as Error).message }
+    }
+  })
+
+  // Team hand-off packs. Everything is one offline file; tokens ride ONLY
+  // when a passphrase seals them (see src/main/pack/pack.ts for the policy).
+  handle('pack:export', async ({ passphrase }) => {
+    const w = deps.win()
+    const picked = await dialog.showSaveDialog(w ?? undefined!, {
+      title: 'Export team pack',
+      defaultPath: `mesh-${new Date().toISOString().slice(0, 10)}.meshpack`,
+      filters: [{ name: 'Mesh pack', extensions: ['meshpack'] }],
+    })
+    if (picked.canceled || !picked.filePath) return { path: null }
+    try {
+      let secretValues: Record<string, string> | undefined
+      if (passphrase) {
+        secretValues = {}
+        for (const id of deps.secrets.ids()) {
+          const v = deps.secrets.get(id)
+          if (v !== null) secretValues[id] = v
+        }
+      }
+      const pack = buildPack(db, { passphrase, secretValues, vecAvailable: deps.vecAvailable })
+      const buf = encodePack(pack)
+      await writeFile(picked.filePath, buf)
+      return {
+        path: picked.filePath,
+        counts: Object.fromEntries(Object.entries(pack.data).map(([k, rows]) => [k, rows.length])),
+        vectors: pack.memoryVectors?.length ?? 0,
+        secretsIncluded: Boolean(pack.secrets),
+        sizeBytes: buf.length,
+      }
+    } catch (e) {
+      return { path: null, error: (e as Error).message }
+    }
+  })
+  handle('pack:import', async ({ passphrase }) => {
+    const w = deps.win()
+    if (!w) return { path: null }
+    const res = await dialog.showOpenDialog(w, {
+      title: 'Import team pack',
+      filters: [{ name: 'Mesh pack', extensions: ['meshpack'] }],
+      properties: ['openFile'],
+    })
+    if (res.canceled || res.filePaths.length === 0) return { path: null }
+    try {
+      const pack = decodePack(await readFile(res.filePaths[0]))
+      const report = applyPack(db, pack, {
+        vecAvailable: deps.vecAvailable,
+        passphrase,
+        setSecret: (id, value) => deps.secrets.set(id, value),
+        hasSecret: (id) => deps.secrets.has(id),
+      })
+      void deps.embeddings?.drainPending() // imported un-embedded rows start immediately
+      return { path: res.filePaths[0], report }
+    } catch (e) {
+      return { path: null, error: (e as Error).message }
     }
   })
 
