@@ -4,7 +4,7 @@
 // distillation, titles, FTS and embeddings all see human text.
 // Pure module: no Electron, no DB — unit-tested directly.
 
-/** Slack API markup → plain human text. Mirrored by scripts/clean-slack-memory.mjs. */
+/** Slack API markup → plain human text. */
 export function stripSlackMarkup(text: string): string {
   return (
     text
