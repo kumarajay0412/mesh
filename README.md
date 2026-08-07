@@ -8,6 +8,8 @@ The bet behind it: for incident response, the bottleneck isn't model capability 
 
 Everything runs on your machine, on your own accounts. There is no hosted service.
 
+![A live investigation: the agent works the timeline on the left — Loki queries, memory lookups, git archaeology, its reasoning between steps — while the evidence rail on the right accumulates the similar past incidents and memory hits it is building the case from](docs/screenshots/investigation-live.png)
+
 ## What it does
 
 - **Builds a searchable org memory, two pipelines** — *incident* sources (Linear tickets with comment threads, your chosen Slack incident/RCA channels) are LLM-distilled into structured fields (symptoms · root cause · resolution · error signature); *corpus* sources (every shared Notion page, and — opt-in — **every public Slack channel**) are stored verbatim at zero LLM cost, each hit linking back to its page or thread. Everything is indexed three ways: exact error-signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model. "Staff can't open the dashboard" finds "site can't be reached" with zero shared words.
@@ -88,6 +90,14 @@ flowchart TB
 ```
 
 Every write crosses an approval gate; every claim in the report cites the query, command output, or commit it came from. The deep dive — the exact agentic loop, the permission gate, the report schema, a real annotated trace — is in [`agent-loop.md`](./agent-loop.md). Design history lives in [`architecture.md`](./architecture.md) and [`ideation.md`](./ideation.md). Connecting sources and writing new connectors: [`docs/connecting-sources.md`](./docs/connecting-sources.md) · [`docs/building-a-connector.md`](./docs/building-a-connector.md).
+
+## Screens
+
+| | |
+|---|---|
+| ![Investigations list — every past run with its confidence tier, similar-incident link, and what it cost](docs/screenshots/investigations.png) *Investigations — confidence, similar-incident links, and per-run API cost* | ![Knowledge map — the system topology that rides in every agent prompt, with investigation-discovered edges awaiting approval](docs/screenshots/knowledge-map.png) *Knowledge map — investigations propose edges; you approve them into the prompt* |
+| ![Connections — Grafana, Linear, Slack, Sentry, Notion, each reporting what actually arrived](docs/screenshots/connections.png) *Connections — each card reports what actually arrived, not boilerplate* | ![Settings — provider, model, effort, and the permission mode mirroring Claude Code](docs/screenshots/settings.png) *Settings — provider/model/effort, permission modes mirroring Claude Code* |
+| ![Embedded terminal — a real shell inside Mesh, used for Claude login and fix sessions; never readable by the agent](docs/screenshots/terminal.png) *Embedded terminal — yours, not the agent's (it has no route to it)* | ![First-launch tour](docs/screenshots/welcome.png) *First launch — what Mesh is, in three honest sentences* |
 
 ## Local-first, by construction
 
