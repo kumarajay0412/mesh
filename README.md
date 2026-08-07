@@ -12,11 +12,33 @@ Everything runs on your machine, on your own accounts. There is no hosted servic
 
 ## What it does
 
-- **Builds a searchable org memory, two pipelines** — *incident* sources (Linear tickets with comment threads, your chosen Slack incident/RCA channels) are LLM-distilled into structured fields (symptoms · root cause · resolution · error signature); *corpus* sources (every shared Notion page, and — opt-in — **every public Slack channel**) are stored verbatim at zero LLM cost, each hit linking back to its page or thread. Everything is indexed three ways: exact error-signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model. "Staff can't open the dashboard" finds "site can't be reached" with zero shared words.
-- **Runs real investigations** — spawns a Claude Code session (via *your* Claude login — the Agent SDK, no API key of Mesh's own) inside your local repo checkouts, primed with a versioned SRE runbook, the similar past incidents, your service registry, and your system topology. The session is **read-only by default**: git log/blame, ripgrep, kubectl reads, live Sentry MCP tools, mid-run memory search — and, when [graphify](https://github.com/Graphify-Labs/graphify) is installed, **per-repo code knowledge graphs**: "how does checkout reach settlement.ts" is answered by one `graphify path` traversal with confidence-tagged edges instead of a grep expedition. Graphs are built locally by deterministic AST parsing (no LLM, nothing leaves the machine) during the background repos sync, never by the session itself.
-- **Names culprits with evidence** — reports carry a confidence tier, a culprit `repo/sha/path`, ranked suspects, a structured root-cause story (numbered points, per-service verdicts, measured charts, red herrings, honest unknowns), and an evidence chain where **every claim cites its query, command output, or commit**. A claim without a source doesn't ship.
-- **Gates every write behind you** — any mutating action pops an approval modal (deny by default, 10-minute timeout = deny, deny-all on window close). Posting the report to Linear, opening a fix session in your terminal — all explicit approvals, all audited.
-- **Gets smarter with your sign-off** — each report proposes reusable learnings and knowledge-map edges it *verified during the run*. You accept or dismiss; only accepted items ever ride in future prompts. Finished investigations are written back into memory, so the next similar incident starts from this one's answer.
+**Builds a searchable org memory — two pipelines.**
+
+- *Incident* sources (Linear tickets + comment threads, your picked Slack incident/RCA channels) are LLM-distilled into structured fields: symptoms · root cause · resolution · error signature.
+- *Corpus* sources (every shared Notion page and, opt-in, **every public Slack channel**) are stored verbatim — zero LLM cost, every hit links back to its page or thread.
+- Indexed three ways: exact error signature, full-text (FTS5/BM25), and semantic vectors from a *local* embedding model — "staff can't open the dashboard" finds "site can't be reached" with zero shared words.
+
+**Runs real investigations.**
+
+- Spawns a Claude Code session on *your* Claude login (the Agent SDK — Mesh has no API key of its own) inside your local repo checkouts.
+- Primed with a versioned SRE runbook, the similar past incidents, your service registry, and your system topology.
+- **Read-only by default**: git log/blame, ripgrep, kubectl reads, live Sentry MCP tools, mid-run memory search.
+- With [graphify](https://github.com/Graphify-Labs/graphify) installed, **per-repo code knowledge graphs**: "how does checkout reach settlement.ts" is one `graphify path` traversal with confidence-tagged edges, not a grep expedition. Graphs build locally (deterministic AST, no LLM) during the background repos sync — never inside a session.
+
+**Names culprits with evidence.**
+
+- Confidence tier · culprit `repo/sha/path` · ranked suspects · measured charts, red herrings, honest unknowns.
+- **Every claim cites its query, command output, or commit.** A claim without a source doesn't ship.
+
+**Gates every write behind you.**
+
+- Any mutating action pops an approval modal — deny by default, 10-minute timeout = deny, deny-all on window close.
+- Posting to Linear, opening a fix session: explicit approvals, all audited.
+
+**Gets smarter with your sign-off.**
+
+- Reports propose learnings and map edges *verified during the run*; only what you accept rides in future prompts.
+- Finished investigations write back into memory — the next similar incident starts from this one's answer.
 
 ## How it fits together
 
@@ -89,7 +111,11 @@ flowchart TB
     REPORT --> HTML["self-contained HTML report<br/>(offline, charts inline)"]
 ```
 
-Every write crosses an approval gate; every claim in the report cites the query, command output, or commit it came from. The deep dive — the exact agentic loop, the permission gate, the report schema, a real annotated trace — is in [`agent-loop.md`](./agent-loop.md). Design history lives in [`architecture.md`](./architecture.md) and [`ideation.md`](./ideation.md). Connecting sources and writing new connectors: [`docs/connecting-sources.md`](./docs/connecting-sources.md) · [`docs/building-a-connector.md`](./docs/building-a-connector.md).
+Deeper reading:
+
+- [`agent-loop.md`](./agent-loop.md) — the exact agentic loop, the permission gate, the report schema, a real annotated trace
+- [`architecture.md`](./architecture.md) · [`ideation.md`](./ideation.md) — design of record and its history
+- [`docs/connecting-sources.md`](./docs/connecting-sources.md) · [`docs/building-a-connector.md`](./docs/building-a-connector.md) — connecting your sources, writing a new connector
 
 ## Screens
 
@@ -101,7 +127,10 @@ Every write crosses an approval gate; every claim in the report cites the query,
 
 ## Local-first, by construction
 
-One SQLite file (`mesh.db` in your user-data dir) holds everything: memory, investigations, the full event-by-event transcript of every session, learnings, the knowledge map, token/cost telemetry. Embeddings are computed locally (MiniLM in a worker process — no embedding API). Source tokens live in the OS keychain via Electron `safeStorage`, encrypted before they ever touch the database. The agent runs on your own Claude subscription. Nothing is hosted, nothing phones home.
+- **One SQLite file** (`mesh.db` in your user-data dir) holds everything: memory, investigations, full event-by-event session transcripts, learnings, the knowledge map, token/cost telemetry.
+- **Embeddings are computed locally** — MiniLM in a worker process, no embedding API.
+- **Tokens live in the OS keychain** (Electron `safeStorage`), encrypted before they ever touch the database.
+- **The agent runs on your own Claude subscription.** Nothing is hosted, nothing phones home.
 
 ## Getting started
 
@@ -112,11 +141,16 @@ npm run electron:dev # the desktop app, hot-reloading
 
 Then, inside the app:
 
-1. **Connections** — add your Grafana instance(s) (read-scoped token; service discovery reads your Loki labels and drafts a service registry mapped to your local repos), your Linear API key, Slack (paste a token, *pick* your incident/RCA channels from a live list, and optionally flip **Index all public channels** for the verbatim corpus — a user token reads channels without invites), Notion (share pages with the integration; they ingest verbatim with backlinks), and optionally Sentry (the agent gets live issue/event/trace tools). Every dialog carries a step-by-step token guide, and each card reports what actually arrived — counts, sync recency, and zero-yield states that say why.
-2. **Memory → Refresh** — first run is the backfill; every run after is incremental via per-source cursors. Sync is crash-safe: cursors only advance after a complete walk, and re-walks are absorbed idempotently.
-3. **Knowledge map → Seed from description** — paste a plain-language description of your system (or an architecture doc); one cheap model call extracts services and who-calls-whom into an editable map. Mesh ships knowing nothing about anyone's org — this is where *yours* comes in. Investigations propose additions from then on.
-4. **Optional: code graphs** — `uv tool install graphifyy` and the next repos sync builds a queryable knowledge graph for every service-mapped repo (local tree-sitter AST — free, incremental). Sessions then answer structure questions ("what calls X?", "how does A reach B?") with one graph traversal instead of grepping, and cite the path as evidence. Not installed → everything degrades to `rg` exactly as before.
-5. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline; steer it mid-flight; approve or deny anything that wants to write.
+1. **Connections** — every dialog carries a step-by-step token guide, and each card reports what actually arrived (counts, sync recency, zero-yield states that say why):
+   - **Grafana** — read-scoped token; service discovery reads your Loki labels and drafts a registry mapped to your local repos
+   - **Linear** — API key; tickets + comment threads
+   - **Slack** — *pick* your incident/RCA channels from a live list; optionally flip **Index all public channels** (a user token reads without invites)
+   - **Notion** — share pages with the integration; they ingest verbatim with backlinks
+   - **Sentry** (optional) — live issue/event/trace tools in every session
+2. **Memory → Refresh** — first run backfills; every run after is incremental. Crash-safe: cursors advance only after a complete walk, re-walks absorb idempotently.
+3. **Knowledge map → Seed from description** — paste an architecture doc; one cheap model call drafts services and who-calls-whom into an editable map. Mesh ships knowing nothing about anyone's org — this is where *yours* comes in.
+4. **Optional: code graphs** — `uv tool install graphifyy`; the next repos sync builds a queryable graph per service-mapped repo (local tree-sitter AST — free, incremental). Not installed → everything degrades to `rg`.
+5. **New investigation** — paste a ticket URL or describe a symptom. Watch the timeline, steer mid-flight, approve or deny anything that wants to write.
 
 ### Packaging a DMG
 
@@ -124,7 +158,7 @@ Then, inside the app:
 npm run dist
 ```
 
-Builds the renderer + main bundles and packages `release/Mesh-<version>-arm64.dmg` (unsigned — right-click → Open on first launch). Delete any old DMG from `release/` first if you're checking file dates to tell builds apart — electron-builder won't clean stale artifacts for you.
+Packages `release/Mesh-<version>-arm64.dmg` (unsigned — right-click → Open on first launch). Clear old DMGs from `release/` first; electron-builder won't clean stale artifacts for you.
 
 ## Development
 
@@ -153,6 +187,16 @@ src/renderer/   Vite + React + Tailwind on the PRESS design system (dark-first, 
 scripts/        build, dev-watch, native prebuilds, benchmark harness
 ```
 
-## Honest status
+## Integrations — today and planned
 
-Mesh is young and was built as a personal internal tool first. It works end-to-end on real incidents — including finding a two-commit interaction and an actual fix commit that a bare coding agent missed — but the benchmark harness (Mesh vs. plain Claude Code vs. Claude + runbook, blind-graded on real resolved tickets) has only a handful of trials so far, and per-investigation token cost is measured but not yet tuned. macOS/arm64 is the only packaged platform today. Read the reports skeptically; that's what the evidence chain is for.
+Everything connects through one seam: a connector is a fetcher with a crash-safe cursor ([`docs/building-a-connector.md`](./docs/building-a-connector.md)); the engine never changes when a source is added. Anything with an API, timestamps, and text can become one — LLM-distilled like Linear, or verbatim corpus like Notion.
+
+| Category | Today | Planned |
+| --- | --- | --- |
+| **Observability** | Grafana (Loki labels → service discovery · annotations · Prometheus k8s signals) · Sentry (live issue/event/trace MCP tools in sessions) | Datadog · CloudWatch · New Relic · Azure Monitor |
+| **Incident management** | Linear (tickets + comment threads in; report write-back behind approval) | PagerDuty · Opsgenie · incident.io · Jira |
+| **Knowledge & comms** | Slack (picked incident/RCA channels, distilled · all public channels, verbatim corpus) · Notion (shared pages, verbatim with backlinks) | Confluence · Google Docs |
+| **Infrastructure & deploys** | Kubernetes read-only (GKE/AKS on your own gcloud/az login) · deploy/restart/OOM signals via Prometheus | Vercel (deploys + logs) · CloudWatch Logs · GCP Logging |
+| **Code** | GitHub (org clone + fetch on your own `gh`) · per-repo code graphs ([graphify](https://github.com/Graphify-Labs/graphify), local AST) | GitLab · Bitbucket |
+| **Product analytics** | — | PostHog (what users actually hit, not just what servers logged) |
+| **Agent providers** | Claude Code (Agent SDK on your subscription — the approval broker lives here) · Codex (read-only) | direct Anthropic / OpenAI APIs · Gemini · local models via Ollama |
