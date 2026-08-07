@@ -2,6 +2,8 @@
 
 **An incident-investigation agent that starts out already knowing your org.**
 
+> 🚧 **Public alpha** — Mesh works end-to-end on real incidents, but it is young and moving fast: schemas, IPC contracts, and connectors may change without notice. macOS (arm64) is the only packaged platform today.
+
 Mesh is a local desktop app (macOS, Electron). You hand it a ticket or a symptom — *"checkout 5xx spike"*, *"no transcript generated"* — and it investigates across your repos, your observability, and your own incident history, then returns an evidence-linked root cause, down to the culprit commit and line.
 
 The bet behind it: for incident response, the bottleneck isn't model capability — it's **organizational context**. A bare coding agent doesn't know your services, your deploy pipeline, or that this exact symptom happened twice last quarter and how it was fixed. Mesh does, because it builds that memory first and improves it after every investigation.
